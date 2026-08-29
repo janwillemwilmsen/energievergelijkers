@@ -1,0 +1,248 @@
+{
+  "runs": [
+    {
+      "startedAt": "2026-08-21T07:00:00.000Z",
+      "finishedAt": "2026-08-21T07:02:10.000Z",
+      "startedAtLabel": "vrijdag 21 augustus 2026 om 09:00",
+      "trigger": "seed",
+      "profile": "laag",
+      "postcode": "5216EK",
+      "huisnummer": "27",
+      "usage": { "normaal": 1170, "dal": 630, "gas": 800 },
+      "sources": [
+        {
+          "id": "energievergelijk",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 142.1, "yearlyTotal": 1705.2, "discount": 175, "rating": 8.1 },
+            { "provider": "Vattenfall", "product": "Vast & Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 148.4, "yearlyTotal": 1780.8, "discount": 200, "rating": 7.6 },
+            { "provider": "Essent", "product": "Zekerheid 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 151.2, "yearlyTotal": 1814.4, "discount": 150, "rating": 7.4 },
+            { "provider": "Eneco", "product": "Vast 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 153.0, "yearlyTotal": 1836.0, "discount": 125, "rating": 7.8 }
+          ]
+        },
+        {
+          "id": "independer",
+          "offers": [
+            { "provider": "BudgetEnergie", "product": "Budget Zeker", "looptijd": "1 jaar", "monthlyInclDiscount": 141.8, "yearlyInclDiscount": 1701.6, "discount": 175, "rating": 8.0 },
+            { "provider": "Nuon", "product": "Vattenfall Vast", "looptijd": "12 maanden", "monthlyInclDiscount": 149.1, "yearlyInclDiscount": 1789.2, "discount": 200, "rating": 7.5 },
+            { "provider": "Frank Energie", "product": "Frank Dynamisch", "contractKind": "Dynamisch", "looptijd": "onbepaald", "monthlyInclDiscount": 136.4, "yearlyInclDiscount": 1636.8, "discount": 0, "rating": 8.4 }
+          ]
+        }
+      ]
+    },
+    {
+      "startedAt": "2026-08-28T07:00:00.000Z",
+      "finishedAt": "2026-08-28T07:02:04.000Z",
+      "startedAtLabel": "vrijdag 28 augustus 2026 om 09:00",
+      "trigger": "seed",
+      "profile": "laag",
+      "postcode": "5216EK",
+      "huisnummer": "27",
+      "usage": { "normaal": 1170, "dal": 630, "gas": 800 },
+      "sources": [
+        {
+          "id": "energievergelijk",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 139.6, "yearlyTotal": 1675.2, "discount": 200, "rating": 8.1 },
+            { "provider": "Vattenfall", "product": "Vast & Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 146.9, "yearlyTotal": 1762.8, "discount": 225, "rating": 7.6 },
+            { "provider": "Essent", "product": "Zekerheid 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 150.4, "yearlyTotal": 1804.8, "discount": 175, "rating": 7.4 },
+            { "provider": "Eneco", "product": "Vast 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 151.8, "yearlyTotal": 1821.6, "discount": 150, "rating": 7.8 }
+          ]
+        },
+        {
+          "id": "independer",
+          "offers": [
+            { "provider": "BudgetEnergie", "product": "Budget Zeker", "looptijd": "1 jaar", "monthlyInclDiscount": 138.9, "yearlyInclDiscount": 1666.8, "discount": 200, "rating": 8.0 },
+            { "provider": "Nuon", "product": "Vattenfall Vast", "looptijd": "12 maanden", "monthlyInclDiscount": 147.2, "yearlyInclDiscount": 1766.4, "discount": 225, "rating": 7.5 },
+            { "provider": "Frank Energie", "product": "Frank Dynamisch", "contractKind": "Dynamisch", "looptijd": "onbepaald", "monthlyInclDiscount": 134.1, "yearlyInclDiscount": 1609.2, "discount": 0, "rating": 8.4 }
+          ]
+        }
+      ]
+    },
+    {
+      "startedAt": "2026-08-21T07:05:00.000Z",
+      "finishedAt": "2026-08-21T07:07:00.000Z",
+      "startedAtLabel": "vrijdag 21 augustus 2026 om 09:05",
+      "trigger": "seed",
+      "profile": "midden",
+      "postcode": "5216EK",
+      "huisnummer": "27",
+      "usage": { "normaal": 1885, "dal": 1015, "gas": 1200 },
+      "sources": [
+        {
+          "id": "energievergelijk",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 198.4, "yearlyTotal": 2380.8, "discount": 200, "rating": 8.1, "tariffs": { "kwhNormaal": 0.281, "kwhDal": 0.242, "m3Gas": 1.29 } },
+            { "provider": "Vattenfall", "product": "Vast & Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 206.2, "yearlyTotal": 2474.4, "discount": 250, "rating": 7.6, "tariffs": { "kwhNormaal": 0.289, "kwhDal": 0.249, "m3Gas": 1.32 } },
+            { "provider": "Essent", "product": "Zekerheid 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 209.8, "yearlyTotal": 2517.6, "discount": 200, "rating": 7.4, "tariffs": { "kwhNormaal": 0.292, "kwhDal": 0.251, "m3Gas": 1.34 } },
+            { "provider": "Eneco", "product": "Vast 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 211.5, "yearlyTotal": 2538.0, "discount": 175, "rating": 7.8, "tariffs": { "kwhNormaal": 0.294, "kwhDal": 0.253, "m3Gas": 1.33 } },
+            { "provider": "Greenchoice", "product": "Groene Stroom 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 214.0, "yearlyTotal": 2568.0, "discount": 100, "rating": 8.2 }
+          ]
+        },
+        {
+          "id": "energiekiezer",
+          "offers": [
+            { "provider": "Budget Energie", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 197.9, "yearlyTotal": 2374.8, "discount": -200, "rating": 8.1 },
+            { "provider": "Vandebron", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 208.4, "yearlyTotal": 2500.8, "discount": -125, "rating": 8.0 },
+            { "provider": "ANWB Energie", "contractType": "Variabel", "durationMonths": null, "monthlyTotal": 201.1, "yearlyTotal": 2413.2, "discount": 0, "rating": 7.9 }
+          ]
+        },
+        {
+          "id": "overstappen",
+          "offers": [
+            { "provider": "essent energie", "product": "Zekerheid", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 210.2, "yearlyTotal": 2522.4, "discount": 200, "rating": 7.3 },
+            { "provider": "United Consumers", "product": "UC Vast", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 199.6, "yearlyTotal": 2395.2, "discount": 150, "rating": 7.7 }
+          ]
+        }
+      ]
+    },
+    {
+      "startedAt": "2026-08-28T07:05:00.000Z",
+      "finishedAt": "2026-08-28T07:07:12.000Z",
+      "startedAtLabel": "vrijdag 28 augustus 2026 om 09:05",
+      "trigger": "seed",
+      "profile": "midden",
+      "postcode": "5216EK",
+      "huisnummer": "27",
+      "usage": { "normaal": 1885, "dal": 1015, "gas": 1200 },
+      "sources": [
+        {
+          "id": "energievergelijk",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 194.1, "yearlyTotal": 2329.2, "discount": 225, "rating": 8.1, "tariffs": { "kwhNormaal": 0.274, "kwhDal": 0.236, "m3Gas": 1.26 } },
+            { "provider": "Vattenfall", "product": "Vast & Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 203.8, "yearlyTotal": 2445.6, "discount": 275, "rating": 7.6, "tariffs": { "kwhNormaal": 0.284, "kwhDal": 0.245, "m3Gas": 1.3 } },
+            { "provider": "Essent", "product": "Zekerheid 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 207.6, "yearlyTotal": 2491.2, "discount": 225, "rating": 7.4, "tariffs": { "kwhNormaal": 0.288, "kwhDal": 0.248, "m3Gas": 1.32 } },
+            { "provider": "Eneco", "product": "Vast 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 209.0, "yearlyTotal": 2508.0, "discount": 200, "rating": 7.8, "tariffs": { "kwhNormaal": 0.29, "kwhDal": 0.25, "m3Gas": 1.31 } },
+            { "provider": "Greenchoice", "product": "Groene Stroom 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 212.2, "yearlyTotal": 2546.4, "discount": 125, "rating": 8.2 }
+          ]
+        },
+        {
+          "id": "energiekiezer",
+          "offers": [
+            { "provider": "Budget Energie", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 193.4, "yearlyTotal": 2320.8, "discount": -225, "rating": 8.1 },
+            { "provider": "Vandebron", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 205.9, "yearlyTotal": 2470.8, "discount": -150, "rating": 8.0 },
+            { "provider": "ANWB Energie", "contractType": "Variabel", "durationMonths": null, "monthlyTotal": 198.7, "yearlyTotal": 2384.4, "discount": 0, "rating": 7.9 }
+          ]
+        },
+        {
+          "id": "overstappen",
+          "offers": [
+            { "provider": "essent energie", "product": "Zekerheid", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 208.1, "yearlyTotal": 2497.2, "discount": 225, "rating": 7.3 },
+            { "provider": "United Consumers", "product": "UC Vast", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 196.8, "yearlyTotal": 2361.6, "discount": 175, "rating": 7.7 }
+          ]
+        }
+      ]
+    },
+    {
+      "startedAt": "2026-08-21T07:10:00.000Z",
+      "finishedAt": "2026-08-21T07:12:00.000Z",
+      "startedAtLabel": "vrijdag 21 augustus 2026 om 09:10",
+      "trigger": "seed",
+      "profile": "hoog",
+      "postcode": "5216EK",
+      "huisnummer": "27",
+      "usage": { "normaal": 2600, "dal": 1400, "gas": 1800 },
+      "sources": [
+        {
+          "id": "energievergelijk",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 268.5, "yearlyTotal": 3222.0, "discount": 250, "rating": 8.1 },
+            { "provider": "Vattenfall", "product": "Vast & Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 279.4, "yearlyTotal": 3352.8, "discount": 300, "rating": 7.6 },
+            { "provider": "Essent", "product": "Zekerheid 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 284.1, "yearlyTotal": 3409.2, "discount": 250, "rating": 7.4 },
+            { "provider": "Eneco", "product": "Vast 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 286.8, "yearlyTotal": 3441.6, "discount": 200, "rating": 7.8 }
+          ]
+        },
+        {
+          "id": "gaslicht",
+          "offers": [
+            { "provider": "BudgetEnergie", "product": "Zeker", "monthlyTotal": 267.2, "yearlyTotal": 3206.4, "discount": 250, "durationMonths": 12, "rating": 8.0 },
+            { "provider": "Vattenfall", "product": "Vast & Zeker", "monthlyTotal": 280.1, "yearlyTotal": 3361.2, "discount": 300, "durationMonths": 12, "rating": 7.5 }
+          ]
+        }
+      ]
+    },
+    {
+      "startedAt": "2026-08-28T07:10:00.000Z",
+      "finishedAt": "2026-08-28T07:12:20.000Z",
+      "startedAtLabel": "vrijdag 28 augustus 2026 om 09:10",
+      "trigger": "seed",
+      "profile": "hoog",
+      "postcode": "5216EK",
+      "huisnummer": "27",
+      "usage": { "normaal": 2600, "dal": 1400, "gas": 1800 },
+      "sources": [
+        {
+          "id": "energievergelijk",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 262.8, "yearlyTotal": 3153.6, "discount": 275, "rating": 8.1 },
+            { "provider": "Vattenfall", "product": "Vast & Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 275.0, "yearlyTotal": 3300.0, "discount": 325, "rating": 7.6 },
+            { "provider": "Essent", "product": "Zekerheid 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 281.3, "yearlyTotal": 3375.6, "discount": 275, "rating": 7.4 },
+            { "provider": "Eneco", "product": "Vast 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 283.9, "yearlyTotal": 3406.8, "discount": 225, "rating": 7.8 }
+          ]
+        },
+        {
+          "id": "gaslicht",
+          "offers": [
+            { "provider": "BudgetEnergie", "product": "Zeker", "monthlyTotal": 261.4, "yearlyTotal": 3136.8, "discount": 275, "durationMonths": 12, "rating": 8.0 },
+            { "provider": "Vattenfall", "product": "Vast & Zeker", "monthlyTotal": 276.2, "yearlyTotal": 3314.4, "discount": 325, "durationMonths": 12, "rating": 7.5 }
+          ]
+        }
+      ]
+    },
+    {
+      "startedAt": "2026-08-21T07:15:00.000Z",
+      "finishedAt": "2026-08-21T07:16:40.000Z",
+      "startedAtLabel": "vrijdag 21 augustus 2026 om 09:15",
+      "trigger": "seed",
+      "profile": "custom",
+      "postcode": "5216EK",
+      "huisnummer": "27",
+      "usage": { "normaal": 2500, "dal": 750, "gas": 500 },
+      "sources": [
+        {
+          "id": "energievergelijk",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 128.4, "yearlyTotal": 1540.8, "discount": 150, "rating": 8.1 },
+            { "provider": "Vattenfall", "product": "Vast & Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 134.9, "yearlyTotal": 1618.8, "discount": 175, "rating": 7.6 },
+            { "provider": "Essent", "product": "Zekerheid 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 137.6, "yearlyTotal": 1651.2, "discount": 125, "rating": 7.4 },
+            { "provider": "Eneco", "product": "Vast 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 139.2, "yearlyTotal": 1670.4, "discount": 100, "rating": 7.8 }
+          ]
+        },
+        {
+          "id": "pricewise",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker", "isfixedpricing": true, "totalcost": 1536, "cashback": 150, "contractdurationmonths": 12, "supplierinssurveyscore": 8.1 },
+            { "provider": "Vattenfall", "product": "Vast", "isfixedpricing": true, "totalcost": 1612, "cashback": 175, "contractdurationmonths": 12, "supplierinssurveyscore": 7.6 }
+          ]
+        }
+      ]
+    },
+    {
+      "startedAt": "2026-08-28T07:15:00.000Z",
+      "finishedAt": "2026-08-28T07:16:55.000Z",
+      "startedAtLabel": "vrijdag 28 augustus 2026 om 09:15",
+      "trigger": "seed",
+      "profile": "custom",
+      "postcode": "5216EK",
+      "huisnummer": "27",
+      "usage": { "normaal": 2500, "dal": 750, "gas": 500 },
+      "sources": [
+        {
+          "id": "energievergelijk",
+          "offers": [
+            { "provider": "Budget Energie", "product": "Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 125.8, "yearlyTotal": 1509.6, "discount": 175, "rating": 8.1 },
+            { "provider": "Vattenfall", "product": "Vast & Zeker 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 132.7, "yearlyTotal": 1592.4, "discount": 200, "rating": 7.6 },
+            { "provider": "Essent", "product": "Zekerheid 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 136.1, "yearlyTotal": 1633.2, "discount": 150, "rating": 7.4 },
+            { "provider": "Eneco", "product": "Vast 1 jaar", "contractType": "Vast", "durationMonths": 12, "monthlyTotal": 137.4, "yearlyTotal": 1648.8, "discount": 125, "rating": 7.8 }
+          ]
+        },
+        {
+          "id": "pricewise",
+          "offers": [
+            { "provider": "Budget Energie", "computedname": "Zeker", "isfixedpricing": true, "totalcost": 1504, "cashback": 175, "contractdurationmonths": 12, "supplierinssurveyscore": 8.1 },
+            { "provider": "Vattenfall", "computedname": "Vast", "isfixedpricing": true, "totalcost": 1588, "cashback": 200, "contractdurationmonths": 12, "supplierinssurveyscore": 7.6 }
+          ]
+        }
+      ]
+    }
+  ]
+}

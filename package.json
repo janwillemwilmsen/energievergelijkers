@@ -1,0 +1,31 @@
+{
+  "name": "energievergelijkers",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Lokale energievergelijker bovenop de bestaande vergelijkingssite-clients",
+  "scripts": {
+    "dev": "concurrently -n api,web -c teal,yellow \"node --disable-warning=ExperimentalWarning --watch server/index.mjs\" \"vite --config web/vite.config.js\"",
+    "build": "vite build --config web/vite.config.js",
+    "start": "node --disable-warning=ExperimentalWarning server/index.mjs",
+    "seed": "node server/seed.mjs",
+    "test": "node --test server/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^2.15.0",
+    "vite": "^6.0.3"
+  }
+}

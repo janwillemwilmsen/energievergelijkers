@@ -181,9 +181,12 @@ export async function compare(postcode, houseNr, { normaal, dal, gas } = {}, { d
   return offers;
 }
 
-// ---- CLI ----
+// ---- CLI (only when this file is the process entrypoint) ----
+const isMain =
+  Boolean(process.argv[1]) &&
+  import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
 const args = process.argv.slice(2);
-if (args.length >= 2) {
+if (isMain && args.length >= 2) {
   const flag = (name, dflt) => {
     const i = args.indexOf(`--${name}`);
     return i >= 0 ? Number(args[i + 1]) : dflt;
@@ -226,7 +229,7 @@ if (args.length >= 2) {
       console.error("FAILED:", e.message);
       process.exit(1);
     });
-} else {
+} else if (isMain) {
   console.log(
     "Usage: node gaslicht-client.mjs <postcode> <huisnr> [--normaal N] [--dal N] [--gas N] [--looptijd 1|2+|alle] [--no-details] [--json]"
   );
