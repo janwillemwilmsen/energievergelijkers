@@ -1,0 +1,11 @@
+{
+  "name": "Energievergelijker",
+  "install": "npm ci && npm run build",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev"
+    }
+  ],
+  "ports": [3000, 5173]
+}
