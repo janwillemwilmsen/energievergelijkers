@@ -51,6 +51,39 @@ en ge-upsert; leveranciersnamen worden genormaliseerd ("OXXIO Nederland B.V." �
 `MY_COMPANY_NAME` (default: `Essent`) bepaalt welke leverancier `isMyCompany`
 krijgt en groen wordt uitgelicht.
 
+## Deployen op Coolify (Nixpacks)
+
+De build wordt gestuurd door `nixpacks.toml` in de **repo-root** (de scrapers
+staan in de root, de app in `/dashboard` — de sweep-runner spawnt ze uit de
+bovenliggende map).
+
+Instellingen in Coolify:
+
+| Instelling | Waarde |
+|---|---|
+| Build pack | Nixpacks |
+| Base directory | `/` (repo-root — **niet** `/dashboard`) |
+| Port | `3000` |
+| Persistent storage | volume gemount op `/data` |
+| Env `DATABASE_URL` | `file:/data/rankradar.db` |
+| Env `MY_COMPANY_NAME` | `Essent` (optioneel, is de default) |
+
+Bij elke start draait `prisma db push` + de seed (idempotent) tegen het
+volume, daarna `next start`. Scrapes gestart vanuit de UI draaien als
+detached processen binnen dezelfde container — dat vereist een "echte"
+container-host zoals Coolify; serverless zou ze afbreken.
+
+Voor automatische trend-historie: maak in Coolify een **Scheduled Task** op
+deze applicatie, bijv. dagelijks:
+
+```bash
+cd /app/dashboard && node scripts/run-scrapes.mjs --scenario all
+```
+
+Let op: vergelijkers met strengere anti-botlagen (Gaslicht, Pricewise) kunnen
+kritischer zijn voor datacenter-IP's dan voor een thuisverbinding; faalt een
+platform structureel na de migratie, controleer dan eerst het sweep-log.
+
 ## API
 
 | Route | Doel |

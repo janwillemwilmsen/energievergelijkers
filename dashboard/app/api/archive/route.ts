@@ -58,6 +58,7 @@ export async function GET() {
         solarFeedIn: sc.solarFeedIn,
         isPreset: sc.isPreset,
       },
+      address: sweepRuns[0].postcode ? sweepRuns[0].postcode + " " + (sweepRuns[0].houseNumber ?? "") : null,
       scrapedAt: sweepRuns.reduce((min, r) => (r.scrapedAt < min ? r.scrapedAt : min), sweepRuns[0].scrapedAt),
       platforms: sweepRuns.map((r) => r.platform.label).sort(),
       contractCount: offers.length,

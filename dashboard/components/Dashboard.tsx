@@ -6,6 +6,8 @@ import KpiCards, { OverviewCard } from "./KpiCards";
 import TrendChart from "./TrendChart";
 import OffersTable, { OfferRow } from "./OffersTable";
 import ScrapeControls from "./ScrapeControls";
+import ScrapeForm from "./ScrapeForm";
+import { useSweep } from "./useSweep";
 
 export default function Dashboard() {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
@@ -48,19 +50,14 @@ export default function Dashboard() {
     loadData();
   }, [loadData]);
 
-  const createCustom = async (params: {
-    electricityNormal: number;
-    electricityLow: number;
-    gas: number;
-    solarFeedIn: number;
-  }) => {
-    const r = await fetch("/api/scenarios", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(params),
-    }).then((x) => x.json());
+  const sweep = useSweep(() => {
+    loadScenarios();
+    loadData(true);
+  });
+
+  const onScenarioCreated = async (id: number) => {
     await loadScenarios();
-    setScenarioId(r.scenario.id);
+    setScenarioId(id);
   };
 
   const activeScenario = scenarios.find((s) => s.id === scenarioId) ?? null;
@@ -92,12 +89,9 @@ export default function Dashboard() {
         )}
       </header>
 
-      <ScenarioPicker
-        scenarios={scenarios}
-        activeId={scenarioId}
-        onSelect={setScenarioId}
-        onCreateCustom={createCustom}
-      />
+      <ScenarioPicker scenarios={scenarios} activeId={scenarioId} onSelect={setScenarioId} />
+
+      <ScrapeForm sweep={sweep} onScenarioCreated={onScenarioCreated} />
 
       <ScrapeControls
         scenarioId={scenarioId}
@@ -107,7 +101,7 @@ export default function Dashboard() {
               `${activeScenario.electricityNormal + activeScenario.electricityLow} kWh scenario`
             : "scenario"
         }
-        onDataChanged={() => loadData(true)}
+        sweep={sweep}
       />
 
       {loading ? (

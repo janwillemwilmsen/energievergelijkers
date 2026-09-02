@@ -73,7 +73,7 @@ async function runSweep(scenario) {
   let records = [];
   let status = "completed";
   try {
-    const { stdout } = await exec("node", cliArgs, { cwd: SCRAPER_DIR, maxBuffer: 64 * 1024 * 1024, timeout: 300_000 });
+    const { stdout } = await exec("node", cliArgs, { cwd: SCRAPER_DIR, maxBuffer: 64 * 1024 * 1024, timeout: 300_000, windowsHide: true });
     records = JSON.parse(stdout);
   } catch (e) {
     console.error(`  ${platform}: scrape FAILED — ${String(e.message).slice(0, 150)}`);
@@ -102,7 +102,14 @@ async function runSweep(scenario) {
       records,
     }),
   });
-    const body = await res.json();
-    console.log(`  ${platform}: ${records.length} offers -> ingest ${res.status} (run ${body.runId ?? "?"})`);
+    // A failed ingest must not kill the rest of the sweep.
+    let runId = "?";
+    try {
+      const body = await res.json();
+      runId = body.runId ?? body.error ?? "?";
+    } catch {
+      runId = "unparseable response";
+    }
+    console.log(`  ${platform}: ${records.length} offers -> ingest ${res.status} (run ${runId})`);
   }
 }

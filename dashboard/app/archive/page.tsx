@@ -15,6 +15,7 @@ type Scan = {
     solarFeedIn: number;
     isPreset: boolean;
   };
+  address: string | null;
   scrapedAt: string;
   platforms: string[];
   contractCount: number;
@@ -55,6 +56,9 @@ function ScanCard({ scan }: { scan: Scan }) {
               );
             })}
           </span>
+          {scan.address && (
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">📍 {scan.address}</span>
+          )}
         </div>
         <Link
           href={`/archive/scan?sweepId=${encodeURIComponent(scan.sweepId)}`}

@@ -60,6 +60,8 @@ model ScrapeRun {
   platformId Int
   scenarioId Int
   scrapedAt  DateTime @default(now())
+  postcode   String?
+  houseNumber String?
   status     String   @default("completed") // completed | failed | partial
   offerCount Int      @default(0)
 

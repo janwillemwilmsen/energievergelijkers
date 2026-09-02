@@ -11,7 +11,8 @@ import { prisma } from "@/lib/db";
  * (scripts/run-scrapes.mjs, which runs the 6 scraper CLIs and posts each
  * result back to /api/scrapes/ingest).
  *
- * Body: { scenarioId: number }   -> sweep for that one scenario (custom or preset)
+ * Body: { scenarioId: number, postcode?: string, huisnr?: string }
+ *   -> sweep for that scenario, optionally for a specific address
  *   or: { presets: true }        -> re-run all four preset scenarios
  *
  * Returns { sweepId, expectedRuns } for progress polling via /api/scrapes/status.
@@ -45,10 +46,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Provide scenarioId or presets:true" }, { status: 400 });
   }
 
+  const pc =
+    typeof body.postcode === "string" && /^\d{4}[A-Za-z]{2}$/.test(body.postcode.replace(/\s+/g, ""))
+      ? body.postcode.replace(/\s+/g, "").toUpperCase()
+      : null;
+  const nr = body.huisnr != null && /^\d+$/.test(String(body.huisnr)) ? String(body.huisnr) : null;
+  if (pc && nr) args.push("--postcode", pc, "--huisnr", nr);
+
   const log = openSync(path.join(process.cwd(), `sweep-${sweepId.replace(/[:]/g, "-")}.log`), "a");
   const child = spawn(process.execPath, args, {
     cwd: process.cwd(),
+    // detached: the sweep keeps running even if the request ends or the web
+    // server restarts. windowsHide: without it, a detached console process on
+    // Windows opens its own terminal window (no-op on Linux/macOS hosting).
     detached: true,
+    windowsHide: true,
     stdio: ["ignore", log, log],
     env: { ...process.env, DASHBOARD_URL: req.nextUrl.origin },
   });

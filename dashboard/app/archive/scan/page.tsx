@@ -45,6 +45,7 @@ type PlatformBlock = {
 type ScanDetail = {
   sweepId: string;
   scenario: { name: string | null; electricityNormal: number; electricityLow: number; gas: number; solarFeedIn: number };
+  address: string | null;
   scrapedAt: string;
   platforms: PlatformBlock[];
   providers: { name: string; counts: Record<string, number>; total: number }[];
@@ -304,7 +305,7 @@ function ProviderMatrix({ detail }: { detail: ScanDetail }) {
         </thead>
         <tbody>
           {detail.providers.map((pr) => (
-            <tr key={pr.name} className="border-b border-slate-50">
+            <tr key={pr.name} className="border-b border-slate-50 hover:bg-slate-50/90">
               <td className="px-3 py-1.5 text-slate-700">{pr.name}</td>
               {detail.platforms.map((p) => {
                 const n = pr.counts[p.platform] ?? 0;
@@ -669,7 +670,7 @@ function ScanDetailInner() {
           <p className="text-sm text-slate-500">
             {sc.electricityNormal + sc.electricityLow} kWh
             {sc.gas > 0 ? ` · ${sc.gas} m³ gas` : " · alleen stroom"}
-            {sc.solarFeedIn > 0 ? ` · ${sc.solarFeedIn} kWh teruglevering` : ""} — {total} contracten over{" "}
+            {sc.solarFeedIn > 0 ? ` · ${sc.solarFeedIn} kWh teruglevering` : ""}{detail.address ? ` · 📍 ${detail.address}` : ""} — {total} contracten over{" "}
             {detail.platforms.length} vergelijkers
           </p>
         </div>

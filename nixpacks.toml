@@ -1,0 +1,34 @@
+# Nixpacks build for Coolify.
+#
+# Repo layout: the scraper CLIs (*-client.mjs + energy-lib.mjs) live in the
+# repo ROOT; the Next.js dashboard lives in /dashboard and spawns the scrapers
+# from its parent directory. Therefore: Base Directory in Coolify must be "/"
+# (the repo root), NOT /dashboard — otherwise the scrapers are missing from
+# the image and every sweep fails.
+#
+# Required Coolify settings:
+#   - Port: 3000
+#   - Persistent volume:  /data          (the SQLite database lives here)
+#   - Env var:            DATABASE_URL=file:/data/rankradar.db
+#   - Env var (optional): MY_COMPANY_NAME=Essent
+#
+# prisma db push + seed run at START (not build) so the schema and reference
+# data land on the mounted volume; both are idempotent upserts, safe on every
+# boot.
+
+providers = ["node"]
+
+[variables]
+NIXPACKS_NODE_VERSION = "22"
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "openssl"] # openssl: required by Prisma's query engine
+
+[phases.install]
+cmds = ["cd dashboard && npm ci"]
+
+[phases.build]
+cmds = ["cd dashboard && npx prisma generate && npm run build"]
+
+[start]
+cmd = "cd dashboard && npx prisma db push --skip-generate && npx tsx prisma/seed.ts && npm run start"

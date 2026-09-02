@@ -115,6 +115,8 @@ export async function POST(req: NextRequest) {
       scenarioId: scenario.id,
       scrapedAt: body.scrapedAt ? new Date(body.scrapedAt) : new Date(first.opgehaaldOp ?? Date.now()),
       status: body.status ?? "completed",
+      postcode: first.postcode ? String(first.postcode) : null,
+      houseNumber: first.huisnummer != null ? String(first.huisnummer) : null,
       offerCount: records.length,
     },
   });

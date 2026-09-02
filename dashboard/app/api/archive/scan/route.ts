@@ -114,6 +114,7 @@ export async function GET(req: NextRequest) {
       gas: sc.gas,
       solarFeedIn: sc.solarFeedIn,
     },
+    address: runs[0].postcode ? runs[0].postcode + " " + (runs[0].houseNumber ?? "") : null,
     scrapedAt: runs.reduce((min, r) => (r.scrapedAt < min ? r.scrapedAt : min), runs[0].scrapedAt),
     platforms,
     providers,

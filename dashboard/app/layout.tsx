@@ -22,6 +22,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // Browser extensions (dark readers, translators, password managers) often
+      // inject classes/attributes into <html> before React hydrates, producing a
+      // false-positive mismatch warning. This suppresses attribute warnings on
+      // this element only; content mismatches elsewhere still surface.
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
