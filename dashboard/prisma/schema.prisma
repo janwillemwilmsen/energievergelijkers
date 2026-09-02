@@ -1,0 +1,105 @@
+// Rank Radar — relational schema for tracking energy-contract rankings
+// across Dutch comparison platforms.
+//
+// Dev runs on SQLite; for production switch the datasource to PostgreSQL
+// (provider = "postgresql") — the schema is written to be portable:
+// `rawJson` is a stringified JSON column (works on both engines).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// A comparison website we scrape (Gaslicht, Independer, ...).
+model Platform {
+  id      Int    @id @default(autoincrement())
+  name    String @unique // canonical slug: "gaslicht", "independer", ...
+  label   String // display name: "Gaslicht.com"
+  baseUrl String
+
+  offers ContractOffer[]
+  runs   ScrapeRun[]
+}
+
+// An energy supplier appearing in the rankings. Names are normalized at
+// ingest ("OXXIO Nederland B.V." -> "Oxxio") so one supplier is one row
+// across all platforms.
+model Supplier {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  isMyCompany Boolean @default(false)
+
+  offers ContractOffer[]
+}
+
+// A consumption scenario. The four presets are seeded; custom scenarios are
+// find-or-created by their parameter tuple on ingest.
+model Scenario {
+  id                Int     @id @default(autoincrement())
+  name              String? // "low" | "medium" | "high" | "solar" | null for custom
+  electricityNormal Int // kWh/year, normal tariff
+  electricityLow    Int // kWh/year, off-peak (0 = single meter / no split)
+  gas               Int // m3/year, 0 = electricity-only (mono)
+  solarFeedIn       Int // kWh/year returned to grid, 0 = none
+  isPreset          Boolean @default(false)
+
+  runs ScrapeRun[]
+
+  @@unique([electricityNormal, electricityLow, gas, solarFeedIn])
+}
+
+// One scraper execution against ONE platform for ONE scenario.
+// (A full sweep = 6 runs, one per platform, sharing a sweepId.)
+model ScrapeRun {
+  id         Int      @id @default(autoincrement())
+  sweepId    String? // groups the 6 per-platform runs of one sweep
+  platformId Int
+  scenarioId Int
+  scrapedAt  DateTime @default(now())
+  status     String   @default("completed") // completed | failed | partial
+  offerCount Int      @default(0)
+
+  platform Platform        @relation(fields: [platformId], references: [id])
+  scenario Scenario        @relation(fields: [scenarioId], references: [id])
+  offers   ContractOffer[]
+
+  @@index([scenarioId, platformId, scrapedAt])
+}
+
+// A single contract position in a single run.
+model ContractOffer {
+  id           Int    @id @default(autoincrement())
+  scrapeRunId  Int
+  platformId   Int
+  supplierId   Int
+  contractName String
+  contractType String // "vast" | "variabel" | "dynamisch" | "combinatie"
+  durationMonths Int? // 12/24/36 for vast, null = indefinite
+
+  rank Int // 1-based position within (run, platform), by annual cost asc
+
+  annualCost           Float // incl. discount ("verwachte jaarkosten")
+  monthlyCost          Float
+  annualCostExDiscount Float?
+  discount             Float? // korting / cashback in EUR
+
+  feedInTariff  Float? // terugleververgoeding EUR/kWh
+  tariffElecNormal Float? // all-in EUR/kWh where the platform exposes it
+  tariffElecLow    Float?
+  tariffGas        Float?
+  rating        Float?
+  reviewCount   Int?
+
+  rawJson String // full canonical scraper record, stringified
+
+  scrapeRun ScrapeRun @relation(fields: [scrapeRunId], references: [id], onDelete: Cascade)
+  platform  Platform  @relation(fields: [platformId], references: [id])
+  supplier  Supplier  @relation(fields: [supplierId], references: [id])
+
+  @@index([scrapeRunId, rank])
+  @@index([supplierId])
+}

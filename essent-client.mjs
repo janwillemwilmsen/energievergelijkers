@@ -1,17 +1,16 @@
 #!/usr/bin/env node
-// Standalone Essent.nl offer client — derived from a recorded HAR (2026-08-25).
-// Reproduces the "Bereken mijn termijnbedrag" funnel without a browser.
-//
-// Usage: node essent-client.mjs <postcode> <housenumber> [--normaal 2500] [--dal 1500] [--gas 800] [--json]
+// Essent.nl offer client — derived from a recorded HAR (2026-08-25).
+// JSON funnel API under /api/public/. Supports stroom+gas and alleen-stroom
+// (only the electricity EAN is selected) and teruglevering (zonnepanelen).
+// Uses energy-lib.mjs for the uniform CLI, filters, and canonical records.
+
+import { UA, parseCli, makeRecord, filterRecords, sortRecords, output, round } from "./energy-lib.mjs";
 
 const BASE = "https://www.essent.nl";
-
-// CloudFront blocks non-browser fingerprints; these headers match the recorded session.
 const HEADERS = {
-  "accept": "application/json",
-  "user-agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-  "referer": "https://www.essent.nl/",
+  accept: "application/json",
+  "user-agent": UA,
+  referer: "https://www.essent.nl/",
   "x-request-origin": "client",
   "x-client-version": "4.452.0",
   "accept-language": "nl-NL,nl;q=0.9",
@@ -28,131 +27,135 @@ async function api(method, path, body) {
   return text ? JSON.parse(text) : null;
 }
 
-// 1. Resolve postcode + house number to a street address.
-export async function lookupAddress(postcode, houseNumber) {
-  const q = new URLSearchParams({ postcode, house_number: houseNumber });
-  const list = await api("GET", `/api/public/contracts-middleware/contracts/addresses/v2?${q}`);
-  if (!list?.length) throw new Error(`No address found for ${postcode} ${houseNumber}`);
-  return list[0]; // {postcode, house_number, street, city, country}
+// Pull tariffs out of an offer's offerOverviews (per energy type: all-in
+// consumption prices, delivery-only unit prices, vaste leveringskosten).
+function parseOverview(offer, energyType) {
+  const ov = (offer.offerOverviews ?? []).find((o) => o.energyType === energyType);
+  if (!ov) return {};
+  const cons = ov.consumptionPrices ?? [];
+  const allinNormaal = cons.find((c) => /Normaaltarief|Totaal gas|Totaal elektriciteit \(/i.test(c.description))?.amount ?? cons[0]?.amount ?? null;
+  const allinDal = cons.find((c) => /Daltarief/i.test(c.description))?.amount ?? null;
+  const prices = (ov.priceGroups ?? []).flatMap((g) => g.prices ?? []);
+  const lev = (re) => prices.find((p) => re.test(p.description))?.unitPrice ?? null;
+  const vastJaar = prices
+    .filter((p) => /^Vaste leveringskosten/i.test(p.description))
+    .reduce((s, p) => s + (p.expectedPeriodAmount || 0), 0) || null;
+  const netbeheer = (ov.priceGroups ?? [])
+    .filter((g) => /netbeheer/i.test(g.description))
+    .flatMap((g) => g.prices ?? [])
+    .reduce((s, p) => s + (p.expectedPeriodAmount || 0), 0) || null;
+  const teruglever = prices.find((p) => /Terugleververgoeding/i.test(p.description))?.unitPrice ?? null;
+  return {
+    allinNormaal, allinDal,
+    levNormaal: lev(/Variabele leveringskosten Normaaltarief|Variabele leveringskosten$/i),
+    levDal: lev(/Variabele leveringskosten Daltarief/i),
+    vastJaar, netbeheer,
+    teruglever: teruglever != null ? Math.abs(teruglever) : null,
+  };
 }
 
-// 2. Start a funnel flow; everything after hangs off the returned flow_id.
-export async function initiateFlow(address) {
-  const r = await api("PUT", "/api/public/bac/initiate-flow", {
-    headers: { Accept: "application/json" },
-    params: {
-      extend_time_to_live: false,
-      house_number: address.house_number,
-      postcode: address.postcode,
-      city: address.city,
-      street: address.street,
-      customer_segment: "household",
-    },
-  });
-  return r.meta_data.flow_id;
-}
-
-// 3. Grid connections (EANs) registered at the address.
-export async function getInstallations(flowId) {
-  const r = await api(
+export async function fetchOffers(input) {
+  const list = await api(
     "GET",
-    `/api/public/contracting/newcustomer/installationdetails/v2?flow_id=${flowId}`
+    `/api/public/contracts-middleware/contracts/addresses/v2?postcode=${input.postcode}&house_number=${input.huisnr}`
   );
-  return r.payload; // [{energy_type, installations:[{connect_ean,...}]}]
-}
+  if (!list?.length) throw new Error(`No address found for ${input.postcode} ${input.huisnr}`);
+  const address = list[0];
 
-// 4. Confirm which EANs the offer applies to.
-export async function selectEans(flowId, eans) {
+  const flow = (
+    await api("PUT", "/api/public/bac/initiate-flow", {
+      headers: { Accept: "application/json" },
+      params: {
+        extend_time_to_live: false,
+        house_number: address.house_number,
+        postcode: address.postcode,
+        city: address.city,
+        street: address.street,
+        customer_segment: "household",
+      },
+    })
+  ).meta_data.flow_id;
+
+  const inst = (await api("GET", `/api/public/contracting/newcustomer/installationdetails/v2?flow_id=${flow}`)).payload;
+  const eans = inst
+    .filter((g) => input.gas > 0 || g.energy_type === "electricity")
+    .flatMap((g) => g.installations.map((i) => i.connect_ean));
   await api("PUT", "/api/public/contracting/newcustomer/eandetails/v2", {
-    meta_data: { flow_id: flowId },
+    meta_data: { flow_id: flow },
     payload: [{ connect_ean: eans }],
   });
-}
 
-// 5. Store the annual consumption the user entered.
-export async function setConsumption(flowId, { normaal, dal, gas }) {
+  const consumption = [
+    {
+      energy_type: "electricity",
+      standard_annual_usages: [
+        { direction_tariff: "supply_low", reading: input.dal },
+        { direction_tariff: "supply_normal", reading: input.normaal },
+        { direction_tariff: "return_supply_low", reading: input.terugDal },
+        { direction_tariff: "return_supply_normal", reading: input.terugNormaal },
+      ],
+    },
+  ];
+  if (input.gas > 0)
+    consumption.push({ energy_type: "gas", standard_annual_usages: [{ direction_tariff: "supply_normal", reading: input.gas }] });
   await api("PUT", "/api/public/contracting/newcustomer/consumption/v2", {
-    meta_data: { flow_id: flowId },
-    payload: [
-      {
-        energy_type: "electricity",
-        standard_annual_usages: [
-          { direction_tariff: "supply_low", reading: dal },
-          { direction_tariff: "supply_normal", reading: normaal },
-          { direction_tariff: "return_supply_low", reading: 0 },
-          { direction_tariff: "return_supply_normal", reading: 0 },
-        ],
-      },
-      { energy_type: "gas", standard_annual_usages: [{ direction_tariff: "supply_normal", reading: gas }] },
-    ],
+    meta_data: { flow_id: flow },
+    payload: consumption,
   });
-}
 
-// 6. The actual offer calculation.
-export async function getOffers(flowId, address, { normaal, dal, gas }) {
   const q = new URLSearchParams({
-    flow_id: flowId,
+    flow_id: flow,
     offer_set: "Basis Offerset Essent",
     customer_segment: "household",
-    postcode: address.postcode,
-    house_number: address.house_number,
+    postcode: input.postcode,
+    house_number: input.huisnr,
     house_number_extension: "",
-    electricity: normaal,
-    electricity_low: dal,
-    electricity_return: 0,
-    gas,
+    electricity: input.normaal,
+    electricity_low: input.dal,
+    electricity_return: input.teruglevering,
     duration_filter: "all_durations",
   });
-  return api("GET", `/api/public/cplusactivation/offers/v1?${q}`);
-}
+  if (input.gas > 0) q.set("gas", input.gas);
+  const data = await api("GET", `/api/public/cplusactivation/offers/v1?${q}`);
 
-export async function calculateOffers(postcode, houseNumber, usage) {
-  const address = await lookupAddress(postcode, houseNumber);
-  const flowId = await initiateFlow(address);
-  const installations = await getInstallations(flowId);
-  const eans = installations.flatMap((g) => g.installations.map((i) => i.connect_ean));
-  await selectEans(flowId, eans);
-  await setConsumption(flowId, usage);
-  const offers = await getOffers(flowId, address, usage);
-  return { address, flowId, eans, offers };
-}
-
-// ---- CLI ----
-const args = process.argv.slice(2);
-if (args.length >= 2) {
-  const flag = (name, dflt) => {
-    const i = args.indexOf(`--${name}`);
-    return i >= 0 ? Number(args[i + 1]) : dflt;
-  };
-  const usage = { normaal: flag("normaal", 2500), dal: flag("dal", 1500), gas: flag("gas", 800) };
-  const asJson = args.includes("--json");
-
-  calculateOffers(args[0], args[1], usage)
-    .then(({ address, flowId, offers }) => {
-      if (asJson) {
-        console.log(JSON.stringify(offers, null, 2));
-        return;
-      }
-      console.log(`Address : ${address.street} ${address.house_number}, ${address.city}`);
-      console.log(`Flow    : ${flowId}`);
-      console.log(`Usage   : ${usage.normaal} kWh normaal / ${usage.dal} kWh dal / ${usage.gas} m3 gas\n`);
-      for (const o of offers.offers ?? []) {
-        console.log(`- ${o.productTitle} (${o.durationTitle ?? o.duration})`);
-        console.log(`    aanbodprijs   : €${Math.round(o.expectedMonthlyAmount)}/mnd (na korting)`);
-        console.log(`    termijnbedrag : €${o.budgetBillAmount}/mnd`);
-        console.log(`    jaarkosten    : €${o.expectedYearlyAmount}`);
-        if (o.incentiveTitle) console.log(`    actie         : ${o.incentiveTitle}`);
-      }
-    })
-    .catch((e) => {
-      console.error("FAILED:", e.message);
-      process.exit(1);
+  return (data.offers ?? []).map((o) => {
+    const el = parseOverview(o, "electricity");
+    const ga = input.gas > 0 ? parseOverview(o, "gas") : {};
+    const title = o.productTitle ?? "";
+    const contractType = /dynamisch/i.test(title) ? "Dynamisch" : /variabel/i.test(title) ? "Variabel" : "Vast";
+    const durM = title.match(/(\d)\s*jaar/i);
+    return makeRecord("essent", input, {
+      leverancier: "Essent",
+      product: title,
+      contractType,
+      looptijdMaanden: contractType === "Vast" && durM ? Number(durM[1]) * 12 : null,
+      prijsPerMaand: round(o.expectedMonthlyAmount, 2),
+      prijsPerJaar: round(o.expectedYearlyAmount, 2),
+      prijsPerJaarExclKorting: round(o.beforeDiscountExpectedYearlyAmount, 2),
+      korting: o.incentiveValue || null,
+      tariefStroomNormaal: el.allinNormaal,
+      tariefStroomDal: el.allinDal,
+      tariefGas: ga.allinNormaal ?? null,
+      tariefStroomNormaalLevering: el.levNormaal,
+      tariefStroomDalLevering: el.levDal,
+      tariefGasLevering: ga.levNormaal ?? null,
+      vasteLeveringskostenStroomPerJaar: round(el.vastJaar, 2),
+      vasteLeveringskostenGasPerJaar: round(ga.vastJaar, 2),
+      netbeheerPerJaar: round((el.netbeheer || 0) + (ga.netbeheer || 0), 2) || null,
+      terugleverVergoedingPerKwh: el.teruglever,
+      rating: null,
+      aantalReviews: null,
+      duurzaamheidsScore: null,
+      labels: [o.incentiveTitle, o.isHighlightedLabel].filter(Boolean).join(" | ") || null,
+      bronOfferId: String(o.offerId ?? o.campaignId ?? ""),
     });
-} else if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop())) {
-  console.log("Usage: node essent-client.mjs <postcode> <housenumber> [--normaal N] [--dal N] [--gas N] [--json]");
+  });
 }
 
-
-//  node essent-client.mjs <postcode> <huisnummer> [--normaal N] [--dal N] [--gas N] [--json] — --json 
-// node essent-client.mjs 3511LX 10 --normaal 1800 --dal 1200 --gas 600 --json
-
+const input = parseCli(process.argv, "essent-client.mjs");
+fetchOffers(input)
+  .then((records) => output(sortRecords(filterRecords(records, input)), input))
+  .catch((e) => {
+    console.error("FAILED:", e.message);
+    process.exit(1);
+  });

@@ -1,0 +1,8 @@
+Sweep ui-2026-09-02T10:19:01-b3d3b9f6 — scenario custom (2500/750 kWh, 500 m3, terug 0)
+  gaslicht: 84 offers -> ingest 200 (run 220)
+  energiekiezer: 69 offers -> ingest 200 (run 221)
+  energievergelijk: 35 offers -> ingest 200 (run 222)
+  independer: 83 offers -> ingest 200 (run 223)
+  overstappen: 48 offers -> ingest 200 (run 224)
+  pricewise: 72 offers -> ingest 200 (run 225)
+Done.

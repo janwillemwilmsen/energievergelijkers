@@ -1,0 +1,10 @@
+Sweep ui-2026-09-02T11:04:16-c76f239c — scenario solar (3500/0 kWh, 1000 m3, terug 2000)
+  gaslicht: 71 offers -> ingest 200 (run 237)
+  energiekiezer: 68 offers -> ingest 200 (run 238)
+  energievergelijk: 30 offers -> ingest 200 (run 239)
+  independer: scrape FAILED — Command failed: node C:\www\ab-har\independer-client.mjs 5216EK 27 --normaal 3500 --dal 0 --gas 1000 --json --teruglevering 2000
+FAILED: No offers ret
+  independer: 0 offers, skipping ingest (status=failed)
+  overstappen: 48 offers -> ingest 200 (run 240)
+  pricewise: 62 offers -> ingest 200 (run 241)
+Done.

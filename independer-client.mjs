@@ -1,21 +1,16 @@
 #!/usr/bin/env node
-// Standalone Independer.nl energy comparison client — derived from a recorded HAR (2026-08-26).
-// Independer is a clean JSON API behind ASP.NET Core antiforgery:
-//   1. GET  /energie/intro.aspx                          -> cookies: XSRF-TOKEN (+ SESSION-XSRF-TOKEN, StateID)
-//   2. GET  /api/address/getaddressdata                  -> validate/resolve the address
-//   3. POST /api/energie/zoekresultaat/getzoekresultaat  -> all offers, JSON in/out
-//      (requires header X-XSRF-TOKEN = value of the XSRF-TOKEN cookie)
-//   4. GET  /api/energie/zoekresultaat/getmaatschappijen -> maatschappijId -> supplier name
-//
-// Usage: node independer-client.mjs <postcode> <huisnr> [--normaal 2500] [--dal 750] [--gas 500]
-//                                   [--contract Vast|Variabel|Dynamisch] [--json]
+// Independer.nl energy comparison client — derived from a recorded HAR (2026-08-26).
+// JSON API with ASP.NET Core antiforgery (XSRF-TOKEN cookie echoed as header).
+// The API returns one contractKind per call, so "alle" fetches Vast + Variabel +
+// Dynamisch and merges. Alleen stroom via contractSoort "Elektra"; teruglevering
+// via elektriciteitverbruikDubbelMeter.opwekkingPiek/-Dal (recorded 2026-08-31).
+
+import { UA, parseCli, makeRecord, filterRecords, sortRecords, output, round } from "./energy-lib.mjs";
 
 const BASE = "https://www.independer.nl";
-
 const UA_HEADERS = {
-  "user-agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-  "accept": "application/json, text/plain, */*",
+  "user-agent": UA,
+  accept: "application/json, text/plain, */*",
   "accept-language": "nl-NL,nl;q=0.9",
 };
 
@@ -45,129 +40,114 @@ async function api(method, path, body) {
   return text ? JSON.parse(text) : null;
 }
 
-const CONTRACT_KINDS = ["Vast", "Variabel", "Dynamisch"];
-
-export async function compare(postcode, huisnr, { normaal, dal, gas } = {}, { contract = "Vast" } = {}) {
-  if (!CONTRACT_KINDS.includes(contract))
-    throw new Error(`Unknown --contract "${contract}" (use: ${CONTRACT_KINDS.join(", ")})`);
-
-  // 1. Antiforgery cookies come with the first page load.
+export async function fetchOffers(input) {
   const page = await fetch(BASE + "/energie/intro.aspx", { headers: UA_HEADERS });
   storeCookies(page);
   if (!jar.has("XSRF-TOKEN")) throw new Error("No XSRF-TOKEN cookie received (flow changed?)");
 
-  // 2. Resolve the address (also validates the postcode/number combination).
-  const pc = postcode.replace(/\s+/g, "").toUpperCase();
-  const pcSpaced = pc.slice(0, 4) + " " + pc.slice(4);
+  const pcSpaced = input.postcode.slice(0, 4) + " " + input.postcode.slice(4);
   const addr = await api(
     "GET",
-    `/api/address/getaddressdata?zipcode=${encodeURIComponent(pcSpaced)}&housenumber=${huisnr}`
+    `/api/address/getaddressdata?zipcode=${encodeURIComponent(pcSpaced)}&housenumber=${input.huisnr}`
   );
   if (!addr?.isValidCombination || !addr.addresses?.length)
-    throw new Error(`No address found for ${postcode} ${huisnr}`);
-  const address = addr.addresses[0];
+    throw new Error(`No address found for ${input.postcode} ${input.huisnr}`);
 
-  // 3. The comparison itself. Body recorded from the "wensen" form submit;
-  //    huidigeLeverancier 9999 = "weet ik niet", doelgroep 2 = consument.
-  const result = await api("POST", "/api/energie/zoekresultaat/getzoekresultaat", {
+  // dal = 0 must use single-meter mode: the API returns HTTP 500 on
+  // elektriciteitverbruikDubbelMeter with verbruikDal 0 (observed 2026-09-02).
+  const enkeleMeter = input.dal === 0;
+  const verbruikElektra = enkeleMeter
+    ? { verbruik: input.normaal }
+    : { verbruikDal: input.dal, verbruikPiek: input.normaal };
+  if (input.teruglevering > 0) {
+    if (enkeleMeter) verbruikElektra.opwekking = input.teruglevering;
+    else {
+      verbruikElektra.opwekkingDal = input.terugDal;
+      verbruikElektra.opwekkingPiek = input.terugNormaal;
+    }
+  }
+  const mkBody = (contractKind) => ({
     contractWensen: {
-      contractSoort: "ElektraEnGas",
+      contractSoort: input.gas > 0 ? "ElektraEnGas" : "Elektra",
       doelgroep: 2,
       extraBiedtDiensten: false,
       extraHelptMetBesparen: false,
       extraHelptMetInzichtInGebruik: false,
       hasSmartMeter: true,
       stroomGroenheid: 1,
-      contractKind: contract,
-      huidigeLeverancier: 9999,
+      contractKind,
+      huidigeLeverancier: 9999, // "weet ik niet"
     },
-    adres: { postcode: pcSpaced, huisnummer: Number(huisnr), huisnummertoevoeging: "" },
+    adres: { postcode: pcSpaced, huisnummer: Number(input.huisnr), huisnummertoevoeging: "" },
     verbruik: {
-      gasverbruik: gas,
-      meterSoort: 2, // dubbele meter
-      elektriciteitverbruikDubbelMeter: { verbruikDal: dal, verbruikPiek: normaal },
+      gasverbruik: input.gas,
+      meterSoort: enkeleMeter ? 1 : 2,
+      ...(enkeleMeter
+        ? { elektriciteitverbruikEnkelMeter: verbruikElektra }
+        : { elektriciteitverbruikDubbelMeter: verbruikElektra }),
     },
     creditDiscount: true,
   });
 
-  // 4. Supplier names.
+  // One call per contract kind; "alle" needs all three to reach the maximum.
+  const kinds =
+    input.contract === "vast" ? ["Vast"]
+    : input.contract === "variabel" ? ["Variabel"]
+    : input.contract === "dynamisch" ? ["Dynamisch"]
+    : ["Vast", "Variabel", "Dynamisch"];
+
   const mij = await api("GET", "/api/energie/zoekresultaat/getmaatschappijen");
   const names = new Map((mij.maatschappijen ?? []).map((m) => [m.id, m.naam]));
 
-  // Featured labels ("Goedkoopste vaste contract", ...) by productId.
-  const labels = new Map();
-  for (const fp of result.featuredProducts?.labeledProducts ?? [])
-    labels.set(Number(fp.productId), fp.labels?.map((l) => l.shortText) ?? []);
-
-  const offers = (result.products ?? []).map((p) => ({
-    id: p.id,
-    provider: names.get(p.maatschappijId) ?? `maatschappij ${p.maatschappijId}`,
-    product: p.naam,
-    looptijd: p.looptijdText,
-    contractKind: p.contractKind,
-    monthlyInclDiscount: p.contractTermAmounts?.monthlyTermAmounts?.termInclDiscountInclTaxReduction ?? null,
-    monthlyExclDiscount: p.contractTermAmounts?.monthlyTermAmounts?.termExclDiscountInclTaxReduction ?? null,
-    yearlyInclDiscount: p.contractTermAmounts?.yearlyTermAmounts?.termInclDiscountInclTaxReduction ?? null,
-    discount: p.discountAmount || null,
-    rating: p.scoreOverview?.hasEnoughReviewsToShow ? p.scoreOverview.averageScore : null,
-    reviews: p.scoreOverview?.numberOfReviews || null,
-    labels: labels.get(p.id) ?? [],
-    tariffs: {
-      kwhNormaal: p.prijsdetails?.stroomLeveringstariefHoog ?? null,
-      kwhDal: p.prijsdetails?.stroomLeveringstariefLaag ?? null,
-      m3Gas: p.prijsdetails?.gasLeveringstarief ?? null,
-      vasteLeveringStroomPerMaand: p.prijsdetails?.stroomVasteLeveringskosten ?? null,
-      vasteLeveringGasPerMaand: p.prijsdetails?.gasVasteLeveringskosten ?? null,
-      terugleverVergoedingPerKwh: p.prijsdetails?.stroomTerugleververgoeding ?? null,
-    },
-  }));
-  offers.sort((a, b) => (a.monthlyInclDiscount ?? 1e9) - (b.monthlyInclDiscount ?? 1e9));
-  return { address: { ...address, postcode: pcSpaced }, offers };
+  const records = [];
+  for (const kind of kinds) {
+    let result;
+    try {
+      result = await api("POST", "/api/energie/zoekresultaat/getzoekresultaat", mkBody(kind));
+    } catch { continue; }
+    const labels = new Map();
+    for (const fp of result.featuredProducts?.labeledProducts ?? [])
+      labels.set(Number(fp.productId), (fp.labels ?? []).map((l) => l.shortText).join(" | "));
+    for (const p of result.products ?? []) {
+      const m = p.contractTermAmounts?.monthlyTermAmounts;
+      const y = p.contractTermAmounts?.yearlyTermAmounts;
+      records.push(
+        makeRecord("independer", input, {
+          leverancier: names.get(p.maatschappijId) ?? `maatschappij ${p.maatschappijId}`,
+          product: p.naam,
+          contractType: kind,
+          looptijdMaanden: kind === "Vast" ? p.contractDurationMonths || null : null,
+          prijsPerMaand: round(m?.termInclDiscountInclTaxReduction, 2),
+          prijsPerJaar: round(y?.termInclDiscountInclTaxReduction, 2),
+          prijsPerJaarExclKorting: round(y?.termExclDiscountInclTaxReduction, 2),
+          korting: p.discountAmount || null,
+          tariefStroomNormaal: p.prijsdetails?.stroomLeveringstariefHoog || p.prijsdetails?.stroomLeveringstarief || null,
+          tariefStroomDal: p.prijsdetails?.stroomLeveringstariefLaag || null,
+          tariefGas: p.prijsdetails?.gasLeveringstarief || null,
+          vasteLeveringskostenStroomPerJaar: p.prijsdetails?.stroomVasteLeveringskosten
+            ? round(p.prijsdetails.stroomVasteLeveringskosten * 12, 2)
+            : null,
+          vasteLeveringskostenGasPerJaar: p.prijsdetails?.gasVasteLeveringskosten
+            ? round(p.prijsdetails.gasVasteLeveringskosten * 12, 2)
+            : null,
+          terugleverVergoedingPerKwh: p.prijsdetails?.stroomTerugleververgoeding || null,
+          rating: p.scoreOverview?.hasEnoughReviewsToShow ? p.scoreOverview.averageScore : null,
+          aantalReviews: p.scoreOverview?.numberOfReviews || null,
+          duurzaamheidsScore: null,
+          labels: labels.get(p.id) || null,
+          bronOfferId: String(p.id),
+        })
+      );
+    }
+  }
+  if (!records.length) throw new Error("No offers returned");
+  return records;
 }
 
-// ---- CLI ----
-const args = process.argv.slice(2);
-if (args.length >= 2) {
-  const flag = (name, dflt) => {
-    const i = args.indexOf(`--${name}`);
-    return i >= 0 ? args[i + 1] : dflt;
-  };
-  const usage = {
-    normaal: Number(flag("normaal", 2500)),
-    dal: Number(flag("dal", 750)),
-    gas: Number(flag("gas", 500)),
-  };
-  const contract = flag("contract", "Vast");
-
-  compare(args[0], args[1], usage, { contract })
-    .then(({ address, offers }) => {
-      if (args.includes("--json")) {
-        console.log(JSON.stringify(offers, null, 2));
-        return;
-      }
-      console.log(`Adres  : ${address.street} ${address.housenumber}, ${address.city}`);
-      console.log(`Verbruik: ${usage.normaal}/${usage.dal} kWh, ${usage.gas} m3 gas — contract: ${contract}`);
-      console.log(`${offers.length} aanbiedingen (gesorteerd op maandbedrag incl. korting):\n`);
-      for (const o of offers) {
-        const tag = o.labels.length ? `  [${o.labels.join(", ")}]` : "";
-        console.log(`- ${o.provider} — ${o.product} (${o.looptijd})${tag}`);
-        console.log(
-          `    per maand: €${o.monthlyInclDiscount?.toFixed(2)} incl. korting (€${o.monthlyExclDiscount?.toFixed(2)} excl.)` +
-            (o.discount ? `  |  korting: €${o.discount.toFixed(2)}` : "") +
-            (o.rating ? `  |  cijfer: ${o.rating} (${o.reviews})` : "")
-        );
-        const t = o.tariffs;
-        console.log(
-          `    tarieven : normaal €${t.kwhNormaal?.toFixed(4)}/kWh, dal €${t.kwhDal?.toFixed(4)}/kWh, gas €${t.m3Gas?.toFixed(4)}/m3, vast €${t.vasteLeveringStroomPerMaand?.toFixed(2)}+€${t.vasteLeveringGasPerMaand?.toFixed(2)}/mnd`
-        );
-      }
-    })
-    .catch((e) => {
-      console.error("FAILED:", e.message);
-      process.exit(1);
-    });
-} else {
-  console.log(
-    "Usage: node independer-client.mjs <postcode> <huisnr> [--normaal N] [--dal N] [--gas N] [--contract Vast|Variabel|Dynamisch] [--json]"
-  );
-}
+const input = parseCli(process.argv, "independer-client.mjs");
+fetchOffers(input)
+  .then((records) => output(sortRecords(filterRecords(records, input)), input))
+  .catch((e) => {
+    console.error("FAILED:", e.message);
+    process.exit(1);
+  });

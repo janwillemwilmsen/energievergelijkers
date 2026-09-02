@@ -1,136 +1,80 @@
 #!/usr/bin/env node
-// Standalone Energievergelijk.nl comparison client — derived from a recorded HAR (2026-08-27).
-//
-// The simplest site so far: one unauthenticated JSON POST does the whole comparison.
+// Energievergelijk.nl comparison client — derived from a recorded HAR (2026-08-27).
+// One unauthenticated JSON POST does the whole comparison:
 //   POST https://api.energievergelijk.nl/vergelijker/search
-//   body: {"gas":500,"power":2500,"power_low":750,"zipcode":"5216EK","housenumber":"27",
-//          "price_rate":"m","origin":"home","lang":"NL"}
-// No cookies, no session, no tokens. The response is a map of ~35 offers with full
-// price breakdowns (tariffs, vaste kosten, netbeheer, korting, reviews).
-//
-// Usage: node energievergelijk-client.mjs <postcode> <huisnr> [--normaal 2500] [--dal 750] [--gas 500]
-//                                         [--contract vast|variabel|dynamisch|alle] [--json]
+// Alleen stroom via gas:0; teruglevering via solar:<kWh/jaar> (key found in the
+// site's own SPA bundle). No cookies, tokens, or session.
+
+import { UA, parseCli, makeRecord, filterRecords, sortRecords, output, num, round } from "./energy-lib.mjs";
 
 const API = "https://api.energievergelijk.nl";
-
 const HEADERS = {
   "content-type": "application/json",
-  "accept": "application/json",
-  "origin": "https://www.energievergelijk.nl",
-  "referer": "https://www.energievergelijk.nl/",
-  "user-agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+  accept: "application/json",
+  origin: "https://www.energievergelijk.nl",
+  referer: "https://www.energievergelijk.nl/",
+  "user-agent": UA,
 };
 
-const num = (s) => (s == null ? null : Number(String(s).replace(/\./g, "").replace(",", ".")));
-
-const CONTRACT_FILTERS = {
-  vast: (o) => o.contractType === "Vast",
-  variabel: (o) => o.contractType === "Variabel",
-  dynamisch: (o) => o.contractType === "Dynamisch",
-  alle: () => true,
-};
-
-export async function compare(postcode, huisnr, { normaal, dal, gas } = {}, { contract = "alle" } = {}) {
-  if (!CONTRACT_FILTERS[contract])
-    throw new Error(`Unknown --contract "${contract}" (use: ${Object.keys(CONTRACT_FILTERS).join(", ")})`);
-  const pc = postcode.replace(/\s+/g, "").toUpperCase();
-
+export async function fetchOffers(input) {
+  const body = {
+    gas: input.gas,
+    power: input.normaal,
+    power_low: input.dal,
+    zipcode: input.postcode,
+    housenumber: String(input.huisnr),
+    price_rate: "m",
+    origin: "home",
+    lang: "NL",
+  };
+  if (input.teruglevering > 0) body.solar = input.teruglevering;
   const res = await fetch(API + "/vergelijker/search", {
     method: "POST",
     headers: HEADERS,
-    body: JSON.stringify({
-      gas,
-      power: normaal,
-      power_low: dal,
-      zipcode: pc,
-      housenumber: String(huisnr),
-      price_rate: "m",
-      origin: "home",
-      lang: "NL",
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`POST /vergelijker/search -> ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const data = await res.json();
-  const list = Object.values(data);
+  const list = Object.values(await res.json());
   if (!list.length) throw new Error("No offers returned — check postcode/huisnummer");
 
-  const offers = list.map((p) => {
+  return list.map((p) => {
     const det = p.pricing?.details ?? {};
     const name = p.name ?? "";
     const contractType = /dynamisch/i.test(name) ? "Dynamisch" : /variabel/i.test(name) ? "Variabel" : /vast/i.test(name) ? "Vast" : name;
-    const durMatch = name.match(/(\d+)\s*jaar/i);
-    return {
-      id: p.id,
-      provider: p.provider?.name,
+    const durY = name.match(/(\d+)\s*jaar/i);
+    const discount = det.discount?.total_sum || null;
+    return makeRecord("energievergelijk", input, {
+      leverancier: p.provider?.name,
       product: name,
       contractType,
-      durationYears: durMatch ? Number(durMatch[1]) : null,
-      monthlyTotal: num(p.pricing?.display_total),
-      yearlyTotal: p.pricing?.total ?? null,
-      discount: det.discount?.total_sum || null,
+      looptijdMaanden: contractType === "Vast" && durY ? Number(durY[1]) * 12 : null,
+      prijsPerMaand: num(p.pricing?.display_total),
+      prijsPerJaar: round(p.pricing?.total, 2),
+      prijsPerJaarExclKorting: round(det.bruto?.total_sum, 2),
+      korting: discount ? round(discount, 2) : null,
+      tariefStroomNormaal: num(det.power?.tariff?.items?.standard),
+      tariefStroomDal: num(det.power?.tariff?.items?.low),
+      tariefGas: num(det.gas?.tariff?.items?.single),
+      vasteLeveringskostenStroomPerJaar: det.fixed_cost?.power != null ? round(det.fixed_cost.power, 2) : null,
+      vasteLeveringskostenGasPerJaar: det.fixed_cost?.gas != null ? round(det.fixed_cost.gas, 2) : null,
+      netbeheerPerJaar: det.operator?.total_sum != null ? round(det.operator.total_sum, 2) : null,
+      terugleverVergoedingPerKwh: num(det.feed_in?.tariff),
       rating: num(p.reviews?.summary?.general?.number),
-      reviews: p.reviews?.summary?.total || null,
-      tariffs: {
-        kwhNormaal: num(det.power?.tariff?.items?.standard),
-        kwhDal: num(det.power?.tariff?.items?.low),
-        m3Gas: num(det.gas?.tariff?.items?.single),
-        vasteLeveringPerJaar: det.fixed_cost?.total_sum ?? null,
-        netbeheerPerJaar: det.operator?.total_sum ?? null,
-        terugleverPerKwh: num(det.feed_in?.tariff),
-      },
-    };
-  });
-  const filtered = offers.filter(CONTRACT_FILTERS[contract]);
-  filtered.sort((a, b) => (a.yearlyTotal ?? 1e9) - (b.yearlyTotal ?? 1e9));
-  return filtered;
-}
-
-// ---- CLI ----
-const args = process.argv.slice(2);
-if (args.length >= 2) {
-  const flag = (name, dflt) => {
-    const i = args.indexOf(`--${name}`);
-    return i >= 0 ? args[i + 1] : dflt;
-  };
-  const usage = {
-    normaal: Number(flag("normaal", 2500)),
-    dal: Number(flag("dal", 750)),
-    gas: Number(flag("gas", 500)),
-  };
-  const contract = flag("contract", "alle");
-
-  compare(args[0], args[1], usage, { contract })
-    .then((offers) => {
-      if (args.includes("--json")) {
-        console.log(JSON.stringify(offers, null, 2));
-        return;
-      }
-      console.log(`Vergelijking: ${args[0]} ${args[1]} — ${usage.normaal}/${usage.dal} kWh, ${usage.gas} m3 gas — contract: ${contract}`);
-      console.log(`${offers.length} aanbiedingen (gesorteerd op jaarkosten incl. korting):\n`);
-      for (const o of offers) {
-        console.log(`- ${o.provider} — ${o.product}`);
-        console.log(
-          `    per maand: €${o.monthlyTotal?.toFixed(2)}  |  per jaar: €${o.yearlyTotal?.toFixed(2)}` +
-            (o.discount ? `  |  korting: €${Math.round(o.discount * 100) / 100}` : "") +
-            (o.rating ? `  |  cijfer: ${o.rating} (${o.reviews})` : "")
-        );
-        const t = o.tariffs;
-        if (t.kwhNormaal)
-          console.log(
-            `    tarieven : normaal €${t.kwhNormaal.toFixed(3)}/kWh` +
-              (t.kwhDal ? `, dal €${t.kwhDal.toFixed(3)}/kWh` : "") +
-              (t.m3Gas ? `, gas €${t.m3Gas.toFixed(3)}/m3` : "") +
-              (t.vasteLeveringPerJaar ? `, vast €${t.vasteLeveringPerJaar.toFixed(0)}/jr` : "")
-          );
-      }
-    })
-    .catch((e) => {
-      console.error("FAILED:", e.message);
-      process.exit(1);
+      aantalReviews: p.reviews?.summary?.total || null,
+      labels:
+        (p.summary ?? [])
+          .filter((s) => s.type !== "standard")
+          .map((s) => s.description)
+          .join(" | ") || null,
+      bronOfferId: String(p.id),
     });
-} else {
-  console.log(
-    "Usage: node energievergelijk-client.mjs <postcode> <huisnr> [--normaal N] [--dal N] [--gas N] [--contract vast|variabel|dynamisch|alle] [--json]"
-  );
+  });
 }
+
+const input = parseCli(process.argv, "energievergelijk-client.mjs");
+fetchOffers(input)
+  .then((records) => output(sortRecords(filterRecords(records, input)), input))
+  .catch((e) => {
+    console.error("FAILED:", e.message);
+    process.exit(1);
+  });

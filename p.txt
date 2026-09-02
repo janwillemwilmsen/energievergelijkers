@@ -1,0 +1,70 @@
+Act as a senior full-stack software engineer and system architect. Build a full-stack dashboard web application to track and analyze energy contract rankings across multiple Dutch price-comparison platforms.
+
+### 1. Context & Objective
+I work for an energy supplier in the Netherlands. I have 6 automated scraping scripts that query Dutch energy comparison websites:
+- Gaslicht.com
+- Energiekiezer.nl
+- Energievergelijk.nl
+- Independer.nl
+- Overstappen.nl
+- Pricewise.nl
+
+Each scrape run across these 6 platforms yields roughly 70–80 contracts each (~450 contracts total per run). The goal of this web app is to ingest this scraped data, persist it historically in a database, and provide an interactive dashboard to monitor our company's rank vs. competitors over time across different consumption scenarios.
+
+---
+
+### 2. Tech Stack Recommendations
+Suggest a lightweight, production-ready stack (e.g., Next.js 14+ / React with Tailwind CSS, FastAPI or Node/Express backend, and PostgreSQL with Prisma or SQLite for local dev). Provide clean, modular code with clear separation of concerns.
+
+---
+
+### 3. Data Model & Database Architecture
+Design a relational schema (SQL/Prisma) that includes:
+- **Platform:** `id`, `name` (e.g., Gaslicht, Independer), `base_url`.
+- **Supplier:** `id`, `name`, `is_my_company` (boolean flag to highlight our brand).
+- **ScrapeRun:** `id`, `timestamp`, `scenario_id` (or custom parameters), `status`.
+- **ContractOffer:** 
+  - `id`, `scrape_run_id`, `platform_id`, `supplier_id`
+  - `contract_name`, `contract_type` (fixed 1yr/3yr, variable, dynamic)
+  - `rank` (position on the comparison site: 1, 2, 3...)
+  - `calculated_annual_cost`, `calculated_monthly_cost`
+  - `feed_in_tariff` (terugleververgoeding/boete details if applicable)
+  - Raw JSON metadata payload.
+
+---
+
+### 4. Core Features & Requirements
+
+#### A. Scenarios & Consumption Filtering
+- **Preset Scenarios (Quick-Toggle Buttons):**
+  1. *Low:* 1,500 kWh electricity / 800 m³ gas (No solar feed-in).
+  2. *Medium:* 2,900 kWh electricity / 1,200 m³ gas (No solar feed-in).
+  3. *High:* 4,500 kWh electricity / 2,000 m³ gas (No solar feed-in).
+  4. *Solar / Prosumer:* 3,500 kWh electricity with 2,000 kWh solar feed-in (teruglevering) / 1,000 m³ gas.
+- **Custom Scenario Builder (User Inputs):**
+  - Electricity consumption (kWh/year: normal/off-peak split optional).
+  - Gas consumption (m³/year).
+  - "Electricity-only (Mono)" toggle: disables gas calculations.
+  - Solar feed-in (kWh/year returned to the grid).
+
+#### B. Ingestion API / Integration
+- An API endpoint (e.g., `POST /api/scrapes/ingest`) that accepts JSON payloads output by the 6 scraper scripts, records the run metadata, and batch-inserts the contract positions.
+
+#### C. Frontend Views & Visualizations
+1. **Executive Overview / Rank Tracker:**
+   - A KPI card showing our company’s current rank on each of the 6 sites for the selected scenario.
+   - Delta badges showing position changes compared to the previous scrape (e.g., "↑ 2 spots", "↓ 1 spot", "= unchanged").
+2. **Trend & Competitor Movement:**
+   - A time-series line chart (Recharts/Chart.js) showing rank movement (Rank 1–10, inverted Y-axis where #1 is at top) over the last 7, 30, or 90 days for top competitors and our brand.
+3. **Master Comparison Table (~400+ entries handled cleanly):**
+   - Paginated/virtualized responsive table.
+   - Visual styling: Highlight rows matching `is_my_company = true` with a distinct background accent.
+   - Column sorting: Rank, Supplier, Contract Name, Annual Cost, Monthly Cost, Platform.
+   - Multi-select filters: Filter by platform(s), supplier(s), and contract type (fixed vs. variable).
+
+---
+
+### 5. Deliverables
+1. Step 1: Database schema definitions (Prisma schema or SQL DDL).
+2. Step 2: The API route / handler for ingesting scrape results.
+3. Step 3: Frontend dashboard implementation with sample mock data so the app runs immediately out of the box.

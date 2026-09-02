@@ -1,0 +1,8 @@
+Sweep ui-2026-09-02T13:49:36-f9ab641a — scenario low (1500/0 kWh, 800 m3, terug 0)
+  gaslicht: 84 offers -> ingest 200 (run 242)
+  energiekiezer: 69 offers -> ingest 200 (run 243)
+  energievergelijk: 34 offers -> ingest 200 (run 244)
+  independer: 83 offers -> ingest 200 (run 245)
+  overstappen: 58 offers -> ingest 200 (run 246)
+  pricewise: 72 offers -> ingest 200 (run 247)
+Done.
