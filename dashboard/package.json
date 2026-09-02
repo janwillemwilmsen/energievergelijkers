@@ -7,14 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node prisma/seed.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "prisma": "^6.19.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -23,12 +24,10 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
-    "prisma": "^6.19.3",
     "tailwindcss": "^4",
-    "tsx": "^4.23.13",
     "typescript": "^5"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node prisma/seed.mjs"
   }
 }

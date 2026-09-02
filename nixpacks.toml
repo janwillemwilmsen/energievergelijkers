@@ -31,4 +31,4 @@ cmds = ["cd dashboard && npm ci"]
 cmds = ["cd dashboard && npx prisma generate && npm run build"]
 
 [start]
-cmd = "cd dashboard && npx prisma db push --skip-generate && npx tsx prisma/seed.ts && npm run start"
+cmd = "cd dashboard && npx prisma db push --skip-generate && node prisma/seed.mjs && npm run start"
