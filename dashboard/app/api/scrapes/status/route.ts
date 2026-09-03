@@ -3,7 +3,8 @@ import { prisma } from "@/lib/db";
 
 /**
  * GET /api/scrapes/status?sweepId=...&expected=6
- * Progress of a sweep: which platform runs have been ingested so far.
+ * Per-platform progress of a sweep, including failures. A sweep is "done"
+ * once every expected platform has reported — success or failure.
  */
 export async function GET(req: NextRequest) {
   const sweepId = req.nextUrl.searchParams.get("sweepId");
@@ -12,14 +13,25 @@ export async function GET(req: NextRequest) {
 
   const runs = await prisma.scrapeRun.findMany({
     where: { sweepId },
-    include: { platform: { select: { label: true } } },
+    include: { platform: { select: { name: true, label: true } } },
     orderBy: { scrapedAt: "asc" },
   });
+  const succeeded = runs.filter((r) => r.status === "completed").length;
+  const failed = runs.filter((r) => r.status === "failed").length;
   return NextResponse.json({
     sweepId,
     completed: runs.length,
+    succeeded,
+    failed,
     expected,
     done: runs.length >= expected,
-    runs: runs.map((r) => ({ platform: r.platform.label, offers: r.offerCount, status: r.status })),
+    runs: runs.map((r) => ({
+      platform: r.platform.name,
+      label: r.platform.label,
+      offers: r.offerCount,
+      status: r.status,
+      error: r.error,
+      scrapedAt: r.scrapedAt,
+    })),
   });
 }

@@ -63,6 +63,7 @@ model ScrapeRun {
   postcode   String?
   houseNumber String?
   status     String   @default("completed") // completed | failed | partial
+  error      String? // failure detail for status=failed
   offerCount Int      @default(0)
 
   platform Platform        @relation(fields: [platformId], references: [id])

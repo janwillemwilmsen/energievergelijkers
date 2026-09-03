@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
     };
     scrapedAt?: string;
     status?: string;
+    error?: string;
+    postcode?: string;
+    huisnr?: string;
     records?: ScraperRecord[];
   };
   try {
@@ -48,11 +51,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const records = body.records;
-  if (!Array.isArray(records) || records.length === 0)
-    return NextResponse.json({ error: "records[] is required and must be non-empty" }, { status: 400 });
+  const records = body.records ?? [];
+  const isFailureReport = records.length === 0 && body.status === "failed";
+  if (!Array.isArray(body.records) || (records.length === 0 && !isFailureReport))
+    return NextResponse.json(
+      { error: "records[] must be non-empty (or status='failed' for a failure report)" },
+      { status: 400 }
+    );
+  if (isFailureReport && !body.scenario)
+    return NextResponse.json({ error: "scenario is required for a failure report" }, { status: 400 });
 
-  const first = records[0];
+  const first = records[0] ?? ({} as ScraperRecord);
   const platformName = (body.platform ?? first.bron ?? "").toLowerCase();
   const meta = PLATFORMS.find((p) => p.name === platformName);
   if (!platformName)
@@ -90,6 +99,23 @@ export async function POST(req: NextRequest) {
     update: {},
   });
 
+  if (isFailureReport) {
+    const run = await prisma.scrapeRun.create({
+      data: {
+        sweepId: body.sweepId ?? null,
+        platformId: platform.id,
+        scenarioId: scenario.id,
+        scrapedAt: body.scrapedAt ? new Date(body.scrapedAt) : new Date(),
+        status: "failed",
+        error: (body.error ?? "unknown error").slice(0, 1000),
+        postcode: body.postcode ?? null,
+        houseNumber: body.huisnr ?? null,
+        offerCount: 0,
+      },
+    });
+    return NextResponse.json({ ok: true, runId: run.id, platform: platform.name, scenarioId: scenario.id, inserted: 0, failed: true });
+  }
+
   // Suppliers: normalize, then upsert the distinct set once.
   const supplierNames = [...new Set(records.map((r) => normalizeSupplier(r.leverancier ?? "Onbekend")))];
   const suppliers = new Map<string, number>();
@@ -115,7 +141,7 @@ export async function POST(req: NextRequest) {
       scenarioId: scenario.id,
       scrapedAt: body.scrapedAt ? new Date(body.scrapedAt) : new Date(first.opgehaaldOp ?? Date.now()),
       status: body.status ?? "completed",
-      postcode: first.postcode ? String(first.postcode) : null,
+      postcode: first.postcode ? String(first.postcode) : body.postcode ?? null,
       houseNumber: first.huisnummer != null ? String(first.huisnummer) : null,
       offerCount: records.length,
     },

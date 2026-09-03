@@ -62,7 +62,10 @@ export async function POST(req: NextRequest) {
     detached: true,
     windowsHide: true,
     stdio: ["ignore", log, log],
-    env: { ...process.env, DASHBOARD_URL: req.nextUrl.origin },
+    // The runner posts results back to THIS server. Use localhost, not the
+    // public origin: inside a container behind a proxy (Coolify/Traefik) the
+    // public URL may not be reachable from the container itself.
+    env: { ...process.env, DASHBOARD_URL: `http://127.0.0.1:${process.env.PORT ?? 3000}` },
   });
   child.unref();
 

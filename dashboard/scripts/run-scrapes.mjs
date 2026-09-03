@@ -54,62 +54,67 @@ for (const scenario of scenarios) await runSweep(scenario);
 console.log("Done.");
 
 async function runSweep(scenario) {
-  const preset = scenario.name ? scenario : null;
   console.log(
     `Sweep ${sweepId} — scenario ${scenario.name ?? "custom"} (${scenario.normaal}/${scenario.dal} kWh, ${scenario.gas} m3, terug ${scenario.teruglevering})`
   );
+  const scenarioBody = {
+    name: scenario.name ?? undefined,
+    electricityNormal: scenario.normaal,
+    electricityLow: scenario.dal,
+    gas: scenario.gas,
+    solarFeedIn: scenario.teruglevering,
+  };
+
+  // Every outcome — success OR failure — is reported to the ingest API so the
+  // dashboard can show per-platform sweep status instead of hanging at 0/N.
+  const report = async (platform, payload) => {
+    try {
+      const res = await fetch(`${API}/api/scrapes/ingest`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ platform, sweepId, scenario: scenarioBody, postcode, huisnr, ...payload }),
+      });
+      let detail = "?";
+      try {
+        const b = await res.json();
+        detail = b.runId ?? b.error ?? "?";
+      } catch {
+        detail = "unparseable response";
+      }
+      return `ingest ${res.status} (run ${detail})`;
+    } catch (e) {
+      return `ingest unreachable: ${String(e.message).slice(0, 120)}`;
+    }
+  };
 
   for (const platform of PLATFORMS) {
-  const cliArgs = [
-    path.join(SCRAPER_DIR, `${platform}-client.mjs`),
-    postcode, huisnr,
-    "--normaal", String(scenario.normaal),
-    "--dal", String(scenario.dal),
-    "--gas", String(scenario.gas),
-    "--json",
-  ];
-  if (scenario.teruglevering > 0) cliArgs.push("--teruglevering", String(scenario.teruglevering));
+    const cliArgs = [
+      path.join(SCRAPER_DIR, `${platform}-client.mjs`),
+      postcode, huisnr,
+      "--normaal", String(scenario.normaal),
+      "--dal", String(scenario.dal),
+      "--gas", String(scenario.gas),
+      "--json",
+    ];
+    if (scenario.teruglevering > 0) cliArgs.push("--teruglevering", String(scenario.teruglevering));
 
-  let records = [];
-  let status = "completed";
-  try {
-    const { stdout } = await exec("node", cliArgs, { cwd: SCRAPER_DIR, maxBuffer: 64 * 1024 * 1024, timeout: 300_000, windowsHide: true });
-    records = JSON.parse(stdout);
-  } catch (e) {
-    console.error(`  ${platform}: scrape FAILED — ${String(e.message).slice(0, 150)}`);
-    status = "failed";
-  }
-  if (!records.length) {
-    console.log(`  ${platform}: 0 offers, skipping ingest (status=${status})`);
-    continue;
-  }
-
-  const res = await fetch(`${API}/api/scrapes/ingest`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      platform,
-      sweepId,
-      scenario: preset
-        ? {
-            name: preset.name,
-            electricityNormal: scenario.normaal,
-            electricityLow: scenario.dal,
-            gas: scenario.gas,
-            solarFeedIn: scenario.teruglevering,
-          }
-        : undefined, // derived from records
-      records,
-    }),
-  });
-    // A failed ingest must not kill the rest of the sweep.
-    let runId = "?";
+    let records = [];
+    let scrapeError = null;
     try {
-      const body = await res.json();
-      runId = body.runId ?? body.error ?? "?";
-    } catch {
-      runId = "unparseable response";
+      const { stdout } = await exec("node", cliArgs, { cwd: SCRAPER_DIR, maxBuffer: 64 * 1024 * 1024, timeout: 300_000, windowsHide: true });
+      records = JSON.parse(stdout);
+      if (!records.length) scrapeError = "scraper returned 0 offers";
+    } catch (e) {
+      // execFile puts the CLI's stderr on e.stderr — that's where the real error is.
+      scrapeError = (e.stderr?.trim() || e.message || "unknown error").slice(0, 500);
     }
-    console.log(`  ${platform}: ${records.length} offers -> ingest ${res.status} (run ${runId})`);
+
+    if (scrapeError) {
+      const out = await report(platform, { status: "failed", error: scrapeError, records: [] });
+      console.error(`  ${platform}: FAILED — ${scrapeError.slice(0, 150)} -> ${out}`);
+    } else {
+      const out = await report(platform, { records });
+      console.log(`  ${platform}: ${records.length} offers -> ${out}`);
+    }
   }
 }
