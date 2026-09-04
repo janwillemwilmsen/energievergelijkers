@@ -2,6 +2,13 @@
   "name": "ab-har",
   "private": true,
   "description": "Dutch energy comparator scrapers (root) + Rank Radar dashboard (/dashboard). Build phases are defined in nixpacks.toml.",
+  "scripts": {
+    "dev": "npm --prefix dashboard run dev",
+    "build": "npm --prefix dashboard run build",
+    "start": "npm --prefix dashboard run start",
+    "lint": "npm --prefix dashboard run lint",
+    "seed": "npm --prefix dashboard run seed"
+  },
   "engines": {
     "node": ">=20"
   }
