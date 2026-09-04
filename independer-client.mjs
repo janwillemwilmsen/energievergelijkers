@@ -54,18 +54,25 @@ export async function fetchOffers(input) {
     throw new Error(`No address found for ${input.postcode} ${input.huisnr}`);
 
   // dal = 0 must use single-meter mode: the API returns HTTP 500 on
-  // elektriciteitverbruikDubbelMeter with verbruikDal 0 (observed 2026-09-02).
+  // meterSoort 2 with verbruikDal 0 (observed 2026-09-02).
+  //
+  // CRITICAL (observed 2026-09-04): in single-meter mode BOTH structures must
+  // be sent. Dynamic-contract pricing reads elektriciteitverbruikDubbelMeter
+  // regardless of meterSoort; with only EnkelMeter present, dynamic quotes are
+  // computed at ~0 kWh electricity (~EUR 900/yr too low vs. all other
+  // comparators). With both present, single-meter prices match the
+  // double-meter reference to the cent.
   const enkeleMeter = input.dal === 0;
-  const verbruikElektra = enkeleMeter
-    ? { verbruik: input.normaal }
-    : { verbruikDal: input.dal, verbruikPiek: input.normaal };
+  const dubbel = { verbruikDal: input.dal, verbruikPiek: input.normaal };
+  const enkel = { verbruik: input.normaal };
   if (input.teruglevering > 0) {
-    if (enkeleMeter) verbruikElektra.opwekking = input.teruglevering;
-    else {
-      verbruikElektra.opwekkingDal = input.terugDal;
-      verbruikElektra.opwekkingPiek = input.terugNormaal;
-    }
+    dubbel.opwekkingDal = input.terugDal;
+    dubbel.opwekkingPiek = input.terugNormaal;
+    enkel.opwekking = input.teruglevering;
   }
+  const verbruikStroom = enkeleMeter
+    ? { elektriciteitverbruikEnkelMeter: enkel, elektriciteitverbruikDubbelMeter: dubbel }
+    : { elektriciteitverbruikDubbelMeter: dubbel };
   const mkBody = (contractKind) => ({
     contractWensen: {
       contractSoort: input.gas > 0 ? "ElektraEnGas" : "Elektra",
@@ -82,9 +89,7 @@ export async function fetchOffers(input) {
     verbruik: {
       gasverbruik: input.gas,
       meterSoort: enkeleMeter ? 1 : 2,
-      ...(enkeleMeter
-        ? { elektriciteitverbruikEnkelMeter: verbruikElektra }
-        : { elektriciteitverbruikDubbelMeter: verbruikElektra }),
+      ...verbruikStroom,
     },
     creditDiscount: true,
   });
