@@ -54,6 +54,64 @@ type ScanDetail = {
 const eur = (v: number | null | undefined, d = 0) => (v == null ? "—" : `€${v.toFixed(d)}`);
 const TYPE_ABBR: Record<string, string> = { vast: "V", variabel: "Var", dynamisch: "Dyn", combinatie: "C" };
 
+// Distinct marker colors for brand highlighting; assigned per brand by its
+// position in the provider list, cycling when there are more brands.
+const BRAND_PALETTE = [
+  "#f59e0b", // amber
+  "#0ea5e9", // sky
+  "#a855f7", // purple
+  "#f43f5e", // rose
+  "#84cc16", // lime
+  "#06b6d4", // cyan
+  "#d946ef", // fuchsia
+  "#f97316", // orange
+  "#6366f1", // indigo
+  "#14b8a6", // teal
+  "#eab308", // yellow
+  "#ec4899", // pink
+];
+
+// All brands as clickable pills; a click toggles highlighting of that brand
+// in the ranking columns. Purely visual — it does not filter.
+function BrandPills({
+  providers,
+  brandColor,
+  selected,
+  onToggle,
+}: {
+  providers: { name: string; total: number }[];
+  brandColor: Map<string, string>;
+  selected: Set<string>;
+  onToggle: (name: string) => void;
+}) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
+      <span className="mr-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        Markeer merk
+      </span>
+      {providers.map((p) => {
+        const hex = brandColor.get(p.name)!;
+        const active = selected.has(p.name);
+        return (
+          <button
+            key={p.name}
+            onClick={() => onToggle(p.name)}
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              active ? "text-slate-900" : "text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+            }`}
+            style={active ? { background: `${hex}2e`, boxShadow: `inset 0 0 0 2px ${hex}` } : undefined}
+            title={active ? "Klik om markering te verwijderen" : "Klik om dit merk te markeren in de rankings"}
+          >
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: hex }} />
+            {p.name}
+            <span className="text-slate-400">{p.total}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Custom tooltip for the positioning scatter: identifies the exact contract.
 function ScatterTip({ active, payload }: { active?: boolean; payload?: { payload?: Record<string, unknown> }[] }) {
   const d = active && payload?.length ? (payload[0].payload as {
@@ -224,10 +282,14 @@ function PlatformColumns({
   platforms,
   typeFilter,
   providerFilter,
+  highlighted,
+  brandColor,
 }: {
   platforms: PlatformBlock[];
   typeFilter: Set<string>;
   providerFilter: Set<string>;
+  highlighted: Set<string>;
+  brandColor: Map<string, string>;
 }) {
   const match = (o: Offer) =>
     (typeFilter.size === 0 || typeFilter.has(o.contractType)) &&
@@ -253,15 +315,19 @@ function PlatformColumns({
                 {visible.length === 0 && (
                   <li className="px-3 py-6 text-center text-[11px] text-slate-400">Geen contracten binnen filter</li>
                 )}
-                {visible.map((o) => (
+                {visible.map((o) => {
+                  const hlHex = highlighted.has(o.supplier) ? brandColor.get(o.supplier) : undefined;
+                  return (
                   <li
                     key={o.rank}
-                    className={`px-3 py-1.5 text-xs ${o.isMyCompany ? "bg-emerald-50 font-semibold" : ""}`}
+                    className={`px-3 py-1.5 text-xs ${o.isMyCompany && !hlHex ? "bg-emerald-50 font-semibold" : hlHex ? "font-medium" : ""}`}
+                    style={hlHex ? { background: `${hlHex}1f`, boxShadow: `inset 3px 0 0 ${hlHex}` } : undefined}
                     title={o.contractName}
                   >
                     <div className="flex items-baseline justify-between gap-1">
                       <span className="truncate text-slate-800">
                         <span className="mr-1 tabular-nums text-slate-400">{o.rank}.</span>
+                        {hlHex && <span className="mr-1 inline-block h-2 w-2 rounded-full" style={{ background: hlHex }} />}
                         {o.supplier}
                         {o.isMyCompany && <span className="ml-1 rounded bg-emerald-600 px-1 text-[9px] font-bold text-white">WIJ</span>}
                       </span>
@@ -275,7 +341,8 @@ function PlatformColumns({
                       {o.discount ? <span className="text-emerald-600">cb {eur(o.discount)}</span> : null}
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ol>
             </div>
           );
@@ -644,6 +711,7 @@ function ScanDetailInner() {
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [providerFilter, setProviderFilter] = useState<Set<string>>(new Set());
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!sweepId) return;
@@ -656,6 +724,7 @@ function ScanDetailInner() {
   if (!detail) return <div className="py-24 text-center text-slate-400">Laden…</div>;
 
   const allTypes = [...new Set(detail.platforms.flatMap((p) => p.offers.map((o) => o.contractType)))].sort();
+  const brandColor = new Map(detail.providers.map((p, i) => [p.name, BRAND_PALETTE[i % BRAND_PALETTE.length]]));
 
   const sc = detail.scenario;
   const total = detail.platforms.reduce((s, p) => s + p.stats.count, 0);
@@ -690,7 +759,26 @@ function ScanDetailInner() {
           onTypes={setTypeFilter}
           onProviders={setProviderFilter}
         />
-        <PlatformColumns platforms={detail.platforms} typeFilter={typeFilter} providerFilter={providerFilter} />
+        <BrandPills
+          providers={detail.providers}
+          brandColor={brandColor}
+          selected={highlighted}
+          onToggle={(name) =>
+            setHighlighted((prev) => {
+              const next = new Set(prev);
+              if (next.has(name)) next.delete(name);
+              else next.add(name);
+              return next;
+            })
+          }
+        />
+        <PlatformColumns
+          platforms={detail.platforms}
+          typeFilter={typeFilter}
+          providerFilter={providerFilter}
+          highlighted={highlighted}
+          brandColor={brandColor}
+        />
       </section>
       <Charts detail={detail} />
       <TariffSection detail={detail} />
