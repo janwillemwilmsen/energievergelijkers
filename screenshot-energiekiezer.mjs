@@ -30,8 +30,16 @@ await run("screenshot-energiekiezer.mjs", "energiekiezer", async (page, input) =
   await page.keyboard.press("Tab");
   await page.waitForResponse((r) => /\/address/i.test(r.url()), { timeout: 20_000 }).catch(() => {});
   await page.waitForTimeout(6000);
-  await page.getByRole("button", { name: "Vergelijk en bespaar" }).first().click();
-  await page.waitForURL(/mijn-wensen/i, { timeout: 30_000 });
+  // The submit no-ops when the address lookup isn't settled yet; re-click with
+  // spacing (rapid re-clicks also no-op) instead of failing on one 30s wait.
+  const submit = page.getByRole("button", { name: "Vergelijk en bespaar" }).first();
+  let advanced = false;
+  for (let attempt = 0; attempt < 3 && !advanced; attempt++) {
+    if (attempt > 0) await page.waitForTimeout(4000);
+    await submit.click().catch(() => {});
+    advanced = await page.waitForURL(/mijn-wensen/i, { timeout: 15_000 }).then(() => true, () => false);
+  }
+  if (!advanced) throw new Error(`homepage-submit bleef hangen op ${page.url()} — geen /mijn-wensen (captcha/botdetectie?)`);
   await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
   await page.waitForTimeout(2000);
 

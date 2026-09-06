@@ -64,7 +64,8 @@ function ScreenshotInner() {
   const setRow = (platform: string, patch: Partial<Row>) =>
     setRows((prev) => prev.map((r) => (r.platform === platform ? { ...r, ...patch } : r)));
 
-  async function start() {
+  // Without `only`, runs all platforms; with it, just that subset (retry).
+  async function start(only?: string[]) {
     if (!sweepId || running) return;
     setRunning(true);
     setError(null);
@@ -74,7 +75,7 @@ function ScreenshotInner() {
       res = await fetch("/api/archive/scan/screenshot", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sweepId }),
+        body: JSON.stringify(only ? { sweepId, platforms: only } : { sweepId }),
       });
     } catch {
       setError("Kon de screenshot-run niet starten.");
@@ -157,7 +158,7 @@ function ScreenshotInner() {
             {hasAny && !running && " De eerder gemaakte screenshots blijven bewaard."}
           </p>
           <button
-            onClick={start}
+            onClick={() => start()}
             disabled={running || !scan.address}
             className="flex shrink-0 items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -214,7 +215,16 @@ function ScreenshotInner() {
                     />
                   </a>
                 ) : row.state === "error" ? (
-                  <p className="text-xs text-rose-600">{row.error ?? "Onbekende fout"}</p>
+                  <div className="flex flex-col items-start gap-2">
+                    <p className="text-xs text-rose-600">{row.error ?? "Onbekende fout"}</p>
+                    <button
+                      onClick={() => start([row.platform])}
+                      disabled={running}
+                      className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      ↻ Opnieuw proberen
+                    </button>
+                  </div>
                 ) : (
                   <div className="flex h-32 items-center justify-center text-xs text-slate-400">
                     {row.state === "running" ? "Screenshot wordt gemaakt…" : "Nog geen screenshot"}
