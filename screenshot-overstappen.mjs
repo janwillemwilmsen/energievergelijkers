@@ -40,9 +40,13 @@ await run("screenshot-overstappen.mjs", "overstappen", async (page, input) => {
   await page.locator('label[for="usage-knowledge-known"]').click();
   await page.locator("#electricityusagehigh-input").waitFor({ timeout: 10_000 });
 
+  // Single meter (dal 0): the site rejects "dal = 0" while the double-meter box
+  // is checked, so uncheck it — clicking the visible label text, since the raw
+  // #doublemeter input is intercepted by its custom-styled wrapper. That
+  // removes the dal field, leaving one stroom field.
   if (input.dal === 0) {
-    const dm = page.locator("#doublemeter");
-    if (await dm.isChecked().catch(() => false)) await page.locator('label[for="doublemeter"], #doublemeter').first().click();
+    await page.getByText("Ik heb een dubbele én slimme meter", { exact: false }).click().catch(() => {});
+    await page.waitForTimeout(800);
     await page.locator("#electricityusagehigh-input").fill(String(input.normaal));
   } else {
     await page.locator("#electricityusagehigh-input").fill(String(input.normaal));
@@ -51,7 +55,8 @@ await run("screenshot-overstappen.mjs", "overstappen", async (page, input) => {
   if (input.gas > 0) await page.locator("#gasusage-input").fill(String(input.gas));
 
   if (input.teruglevering > 0) {
-    await page.locator('label[for="solarPanelsEnabled"], #solarPanelsEnabled').first().click();
+    // Styled checkbox: click the visible label text, not the intercepted input.
+    await page.getByText("Ik heb zonnepanelen", { exact: false }).click().catch(() => {});
     await page.waitForTimeout(1500);
     // best effort: de onthulde teruglever-velden heten als in de API
     const high = page.locator('input[name="electricitysupplyhigh"], #electricitysupplyhigh-input').first();

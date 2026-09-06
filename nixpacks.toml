@@ -11,6 +11,10 @@
 #   - Persistent volume:  /data          (the SQLite database lives here)
 #   - Env var:            DATABASE_URL=file:/data/rankradar.db
 #   - Env var (optional): MY_COMPANY_NAME=Essent
+#   - Env var (screenshots): BROWSERLESS_URL=wss://browserless.<host>
+#   - Env var (screenshots): BROWSERLESS_TOKEN=<token>
+#   - Env var (optional): SHOTS_DIR=/data/screenshots  (persist screenshots on
+#                         the volume; defaults to ./screenshots in the image)
 #
 # prisma db push + seed run at START (not build) so the schema and reference
 # data land on the mounted volume; both are idempotent upserts, safe on every
@@ -25,7 +29,12 @@ NIXPACKS_NODE_VERSION = "22"
 nixPkgs = ["nodejs_22", "openssl"] # openssl: required by Prisma's query engine
 
 [phases.install]
-cmds = ["cd dashboard && npm ci"]
+# Two npm projects: the ROOT deps (playwright-extra + stealth) power the
+# screenshot clients (screenshot-*.mjs), which the dashboard spawns from its
+# parent dir; the dashboard deps power the Next.js app. Both must be installed.
+# playwright-core/-extra do NOT download a browser (the clients connect to a
+# remote browserless over CDP), so no system Chromium is needed here.
+cmds = ["npm ci", "cd dashboard && npm ci"]
 
 [phases.build]
 cmds = ["cd dashboard && npx prisma generate && npm run build"]

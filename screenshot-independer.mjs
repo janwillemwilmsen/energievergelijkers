@@ -47,25 +47,32 @@ await run("screenshot-independer.mjs", "independer", async (page, input) => {
   await page.waitForResponse((r) => /getaddressdata/i.test(r.url()), { timeout: 20_000 }).catch(() => {});
   await page.waitForTimeout(1200);
 
-  await page.locator("#salesboxSubmitButton").click();
-  await page.waitForURL(/\/energie\/invoer\/wensen/, { timeout: 30_000 });
+  // The intro submit only fires once the address lookup has armed it; retry a
+  // few times rather than failing on a single missed click.
+  let arrived = false;
+  for (let i = 0; i < 5 && !arrived; i++) {
+    await page.locator("#salesboxSubmitButton").click().catch(() => {});
+    arrived = await page.waitForURL(/\/energie\/invoer\/wensen/, { timeout: 8_000 }).then(() => true).catch(() => false);
+    if (!arrived) await page.waitForTimeout(1500);
+  }
+  if (!arrived) throw new Error("intro kwam niet bij 'Je wensen'");
 
   // "Je wensen": aansluiting, verbruik, (contracttype overslaan = alle).
   const aansluiting = input.gas > 0 ? "Stroom en gas" : "Alleen stroom";
   await page.getByText(aansluiting, { exact: true }).click().catch(() => {});
   await page.waitForTimeout(400);
 
+  // Single meter (dal 0) collapses the two stroom fields (#stroomVerbruikNormaal
+  // + #stroomVerbruikDal) into one #stroomVerbruik.
   if (input.dal === 0) {
     await page.getByText("Ik heb een enkele meter", { exact: false }).click().catch(() => {});
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
+    await page.locator("#stroomVerbruik").fill(String(input.normaal)).catch(() => {});
+  } else {
+    await page.locator("#stroomVerbruikNormaal").fill(String(input.normaal)).catch(() => {});
+    await page.locator("#stroomVerbruikDal").fill(String(input.dal)).catch(() => {});
   }
-  const fill = async (label, val) => {
-    const box = page.locator(`input[placeholder="${label}"]`).first();
-    if (await box.count()) await box.fill(String(val));
-  };
-  await fill("Normaal", input.normaal);
-  if (input.dal > 0) await fill("Dal", input.dal);
-  if (input.gas > 0) await fill("Gas", input.gas);
+  if (input.gas > 0) await page.locator("#gasVerbruik").fill(String(input.gas)).catch(() => {});
 
   if (input.teruglevering > 0) {
     await page.getByText("Ik heb zonnepanelen", { exact: false }).click().catch(() => {});

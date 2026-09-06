@@ -743,9 +743,17 @@ function ScanDetailInner() {
             {detail.platforms.length} vergelijkers
           </p>
         </div>
-        <Link href="/archive" className="text-sm font-medium text-emerald-700 hover:underline">
-          ← Archief
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/archive/scan/screenshot?sweepId=${encodeURIComponent(sweepId ?? "")}`}
+            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700"
+          >
+            📷 Screenshots
+          </Link>
+          <Link href="/archive" className="text-sm font-medium text-emerald-700 hover:underline">
+            ← Archief
+          </Link>
+        </div>
       </header>
 
       <StatsTable platforms={detail.platforms} />

@@ -9,8 +9,14 @@
 import { readFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright-core";
+import { chromium } from "playwright-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { UA, parseCli } from "./energy-lib.mjs";
+
+// Stealth evasions (hide webdriver, patch navigator/plugins/WebGL, etc.).
+// Combined with browserless' own `stealth=true`, this is what lets the
+// bot-sensitive sites (EnergieKiezer, Pricewise) advance past their start page.
+chromium.use(StealthPlugin());
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,7 +39,9 @@ export async function connect() {
   const token = process.env.BROWSERLESS_TOKEN;
   // timeout: browserless kills sessions after 30s by default — far too short
   // for a full funnel + screenshot.
-  const params = new URLSearchParams({ timeout: "180000" });
+  // stealth: browserless' own anti-detection layer, on top of the playwright
+  // stealth plugin above.
+  const params = new URLSearchParams({ timeout: "180000", stealth: "true" });
   if (token) params.set("token", token);
   const qs = (u) => `${u}${u.includes("?") ? "&" : "?"}${params}`;
 
@@ -93,10 +101,21 @@ export async function autoScroll(page) {
 }
 
 export async function saveShot(page, name, input) {
-  const dir = path.join(ROOT, "screenshots");
+  // SHOTS_DIR lets the deployment point this at a persistent volume
+  // (e.g. /data/screenshots); defaults to ./screenshots next to the scripts.
+  const dir = process.env.SHOTS_DIR
+    ? path.resolve(process.env.SHOTS_DIR)
+    : path.join(ROOT, "screenshots");
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const file = path.join(dir, `${name}-${input.postcode}-${input.huisnr}-${stamp}.png`);
+  // SHOT_NAME (set by the dashboard) gives a deterministic filename so reruns
+  // overwrite in place; failure debug shots keep a timestamp so they never
+  // clobber a good screenshot.
+  const base =
+    process.env.SHOT_NAME && !/FAILED/.test(name)
+      ? `${process.env.SHOT_NAME}.png`
+      : `${name}-${input.postcode}-${input.huisnr}-${stamp}.png`;
+  const file = path.join(dir, base);
   await page.screenshot({ path: file, fullPage: true });
   return file;
 }
