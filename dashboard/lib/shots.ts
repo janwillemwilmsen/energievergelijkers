@@ -28,8 +28,13 @@ export function repoRoot(): string {
 }
 
 // Where screenshots live: SHOTS_DIR (e.g. /data/screenshots) or <root>/screenshots.
+// Without SHOTS_DIR, production (Coolify) prefers the /data persistent volume —
+// the container FS is wiped on every redeploy, which silently lost all shots.
+// Keep in sync with saveShot() in <root>/screenshot-lib.mjs.
 export function shotsBase(): string {
-  return process.env.SHOTS_DIR ? path.resolve(process.env.SHOTS_DIR) : path.join(repoRoot(), "screenshots");
+  if (process.env.SHOTS_DIR) return path.resolve(process.env.SHOTS_DIR);
+  if (process.platform === "linux" && existsSync("/data")) return "/data/screenshots";
+  return path.join(repoRoot(), "screenshots");
 }
 
 // sweepIds contain ':' (illegal in Windows paths) — sanitise for a folder name.

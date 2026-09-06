@@ -99,9 +99,11 @@ pass `--normaal/--dal/--gas/--teruglevering`; `--only <platform>` runs one.
 - `nixpacks.toml` installs **both** npm projects: `npm ci` (root — the
   screenshot deps) and `cd dashboard && npm ci`. No system Chromium is
   installed; the clients connect to a remote browserless over CDP.
-- Set these env vars in Coolify: `BROWSERLESS_URL`, `BROWSERLESS_TOKEN`, and
-  optionally `SHOTS_DIR=/data/screenshots` to keep screenshots on the
-  persistent volume (otherwise they live in the ephemeral container FS).
+- Set these env vars in Coolify: `BROWSERLESS_URL` and `BROWSERLESS_TOKEN`.
+  Screenshots are stored on the persistent volume automatically: when
+  `SHOTS_DIR` is unset and `/data` exists, `/data/screenshots` is used (the
+  ephemeral container FS would lose them on every redeploy). Set `SHOTS_DIR`
+  only to override that location.
 
 ## Notes
 

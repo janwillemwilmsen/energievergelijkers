@@ -6,7 +6,7 @@
 //        [--gas N|--geen-gas] [--teruglevering N] [--panelen N]
 // Standalone by design — not wired to the dashboard or database.
 
-import { readFileSync, mkdirSync } from "node:fs";
+import { readFileSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-extra";
@@ -102,10 +102,15 @@ export async function autoScroll(page) {
 
 export async function saveShot(page, name, input) {
   // SHOTS_DIR lets the deployment point this at a persistent volume
-  // (e.g. /data/screenshots); defaults to ./screenshots next to the scripts.
+  // (e.g. /data/screenshots). Without it, prefer the /data volume when it
+  // exists (production — the container FS loses shots on redeploy), else
+  // ./screenshots next to the scripts. Keep in sync with shotsBase() in
+  // dashboard/lib/shots.ts.
   const dir = process.env.SHOTS_DIR
     ? path.resolve(process.env.SHOTS_DIR)
-    : path.join(ROOT, "screenshots");
+    : process.platform === "linux" && existsSync("/data")
+      ? "/data/screenshots"
+      : path.join(ROOT, "screenshots");
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   // SHOT_NAME (set by the dashboard) gives a deterministic filename so reruns

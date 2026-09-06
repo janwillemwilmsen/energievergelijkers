@@ -13,8 +13,9 @@
 #   - Env var (optional): MY_COMPANY_NAME=Essent
 #   - Env var (screenshots): BROWSERLESS_URL=wss://browserless.<host>
 #   - Env var (screenshots): BROWSERLESS_TOKEN=<token>
-#   - Env var (optional): SHOTS_DIR=/data/screenshots  (persist screenshots on
-#                         the volume; defaults to ./screenshots in the image)
+#   - Env var (optional): SHOTS_DIR  (override the screenshot location; when
+#                         unset, /data/screenshots is used automatically if the
+#                         /data volume exists, so shots survive redeploys)
 #
 # prisma db push + seed run at START (not build) so the schema and reference
 # data land on the mounted volume; both are idempotent upserts, safe on every
