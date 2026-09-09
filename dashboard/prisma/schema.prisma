@@ -91,7 +91,8 @@ model ContractOffer {
   contractType String // "vast" | "variabel" | "dynamisch" | "combinatie"
   durationMonths Int? // 12/24/36 for vast, null = indefinite
 
-  rank Int // 1-based position within (run, platform), by annual cost asc
+  rank     Int // 1-based position within (run, platform), by annual cost asc
+  typeRank Int @default(0) // same, but among offers of the same contractType (0 = not yet backfilled)
 
   annualCost           Float // incl. discount ("verwachte jaarkosten")
   monthlyCost          Float

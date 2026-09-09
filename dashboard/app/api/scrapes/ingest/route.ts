@@ -129,10 +129,19 @@ export async function POST(req: NextRequest) {
   }
 
   // Rank: 1-based by annual cost ascending within this run (offers without a
-  // price sink to the bottom).
+  // price sink to the bottom). typeRank: the same position counted among
+  // offers of the same contract type only (vast / variabel / dynamisch /
+  // combinatie), so "3rd cheapest vast contract" is a stored fact.
   const sorted = [...records].sort(
     (a, b) => (a.prijsPerJaar ?? Number.MAX_VALUE) - (b.prijsPerJaar ?? Number.MAX_VALUE)
   );
+  const typeCounters = new Map<string, number>();
+  const typeRanks = sorted.map((r) => {
+    const t = normalizeContractType(r.contractType);
+    const n = (typeCounters.get(t) ?? 0) + 1;
+    typeCounters.set(t, n);
+    return n;
+  });
 
   const run = await prisma.scrapeRun.create({
     data: {
@@ -156,6 +165,7 @@ export async function POST(req: NextRequest) {
       contractType: normalizeContractType(r.contractType),
       durationMonths: r.looptijdMaanden ?? null,
       rank: i + 1,
+      typeRank: typeRanks[i],
       annualCost: r.prijsPerJaar ?? 0,
       monthlyCost: r.prijsPerMaand ?? (r.prijsPerJaar ? r.prijsPerJaar / 12 : 0),
       annualCostExDiscount: r.prijsPerJaarExclKorting ?? null,

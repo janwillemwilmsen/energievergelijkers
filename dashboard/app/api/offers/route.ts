@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
       contractType: o.contractType,
       durationMonths: o.durationMonths,
       rank: o.rank,
+      typeRank: o.typeRank,
       annualCost: o.annualCost,
       monthlyCost: o.monthlyCost,
       discount: o.discount,

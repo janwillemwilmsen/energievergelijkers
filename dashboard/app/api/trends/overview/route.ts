@@ -10,6 +10,8 @@ import { prisma } from "@/lib/db";
  *   vast, variabel, dynamisch }] }] }
  * where t = epoch ms, myRank = own brand's best rank in that run (null when
  * absent) and myDelta = own brand's best annual cost minus the run's cheapest.
+ * With a types filter, myRank is re-ranked within the selected types (offers
+ * are in overall rank order, so it is the position in the filtered list).
  * Tariff averages use the all-in columns only (Pricewise's delivery-only
  * tariffs live in rawJson and stay excluded); dynamisch includes combinatie —
  * also in the types filter, which restricts every aggregate to those types.
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
     include: {
       platform: { select: { name: true, label: true } },
       offers: {
+        orderBy: { rank: "asc" },
         select: {
           rank: true,
           annualCost: true,
@@ -69,6 +72,7 @@ export async function GET(req: NextRequest) {
     if (!offers.length) continue;
     const costs = offers.map((o) => o.annualCost);
     const cheapest = Math.min(...costs);
+    const myIndex = offers.findIndex((o) => o.supplier.isMyCompany);
     const mine = offers.filter((o) => o.supplier.isMyCompany);
     const perType: Record<string, number> = {};
     for (const o of offers) perType[o.contractType] = (perType[o.contractType] ?? 0) + 1;
@@ -83,7 +87,7 @@ export async function GET(req: NextRequest) {
       avg: Math.round(costs.reduce((s, v) => s + v, 0) / costs.length),
       count: offers.length,
       maxCashback: Math.round(Math.max(0, ...offers.map((o) => o.discount ?? 0))),
-      myRank: mine.length ? Math.min(...mine.map((o) => o.rank)) : null,
+      myRank: myIndex >= 0 ? myIndex + 1 : null, // position within the (filtered) list
       myDelta: mine.length ? Math.round(Math.min(...mine.map((o) => o.annualCost)) - cheapest) : null,
       avgElec: mean(offers.map((o) => o.tariffElecNormal).filter((v): v is number => v != null), 4),
       avgGas: mean(offers.map((o) => o.tariffGas).filter((v): v is number => v != null), 4),

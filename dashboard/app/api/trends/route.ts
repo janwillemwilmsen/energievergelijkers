@@ -6,10 +6,13 @@ import { prisma } from "@/lib/db";
  * Rank time series for our company + the top competitors on one platform;
  * with all=1, every supplier seen in the window (sorted by latest rank).
  * types limits the offers considered to those contract types ("dynamisch"
- * includes "combinatie"); ranks stay the position in the FULL list, so a
- * supplier's best vast contract at overall #7 shows as 7.
+ * includes "combinatie") AND re-ranks within that selection: a supplier's
+ * best vast contract that is the 3rd cheapest vast contract shows as 3, even
+ * if it sits at #7 in the full list (that overall position is returned as
+ * details.overallRank; typeRank is the stored rank within its exact type).
  * Returns { suppliers: [{name, isMyCompany}], points: [{date, [supplier]: rank}],
- * details: [{ [supplier]: {contract, cost, type} }] } (details aligned with points).
+ * details: [{ [supplier]: {contract, cost, type, overallRank, typeRank} }] }
+ * (details aligned with points).
  */
 export async function GET(req: NextRequest) {
   const scenarioId = Number(req.nextUrl.searchParams.get("scenarioId"));
@@ -36,6 +39,7 @@ export async function GET(req: NextRequest) {
       offers: {
         select: {
           rank: true,
+          typeRank: true,
           contractName: true,
           contractType: true,
           annualCost: true,
@@ -47,18 +51,27 @@ export async function GET(req: NextRequest) {
   });
   if (!runs.length) return NextResponse.json({ suppliers: [], points: [], details: [] });
 
-  // Best rank per supplier per run (within the requested contract types),
-  // plus the contract behind that rank for tooltips.
-  type RunInfo = { contract: string; cost: number; type: string };
+  // Best rank per supplier per run, counted within the requested contract
+  // types (offers are already in overall rank order, so the position within
+  // the selection is a running counter), plus the contract behind that rank.
+  type RunInfo = { contract: string; cost: number; type: string; overallRank: number; typeRank: number };
   const perRun = runs
     .map((run) => {
       const ranks = new Map<string, number>();
       const info = new Map<string, RunInfo>();
+      let position = 0;
       for (const o of run.offers) {
         if (typeSet.size && !typeSet.has(o.contractType)) continue;
+        position++;
         if (ranks.has(o.supplier.name)) continue;
-        ranks.set(o.supplier.name, o.rank);
-        info.set(o.supplier.name, { contract: o.contractName, cost: Math.round(o.annualCost), type: o.contractType });
+        ranks.set(o.supplier.name, position);
+        info.set(o.supplier.name, {
+          contract: o.contractName,
+          cost: Math.round(o.annualCost),
+          type: o.contractType,
+          overallRank: o.rank,
+          typeRank: o.typeRank,
+        });
       }
       return { date: run.scrapedAt.toISOString(), ranks, info };
     })

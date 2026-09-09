@@ -39,7 +39,7 @@ const LINE_PALETTE = [
 
 const scenarioName = (s: Scenario) => scenarioLabel(s);
 
-type RunDetail = { contract: string; cost: number; type: string };
+type RunDetail = { contract: string; cost: number; type: string; overallRank: number; typeRank: number };
 type TrendData = {
   suppliers: { name: string; isMyCompany: boolean }[];
   points: Record<string, string | number | null>[];
@@ -84,6 +84,9 @@ function RankTip({
           <>
             <div className="truncate text-slate-500" title={d.contract}>{d.contract}</div>
             <div className="mt-0.5 text-slate-600">€{d.cost}/jaar · {d.type}</div>
+            {d.overallRank !== Number(hovered.value) && (
+              <div className="mt-0.5 text-[10px] text-slate-400">#{d.overallRank} in de volledige lijst</div>
+            )}
           </>
         )}
       </div>
@@ -505,6 +508,11 @@ function VergelijkInner() {
             {t}
           </button>
         ))}
+        <span className="text-[10px] text-slate-400">
+          {typesKey
+            ? `rank = positie binnen ${typesKey.split(",").join(" + ")} (niet in de volledige lijst)`
+            : "rank = positie in de volledige lijst"}
+        </span>
       </div>
 
       <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">

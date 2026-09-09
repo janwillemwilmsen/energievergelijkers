@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
         }
         return {
           rank: o.rank,
+          typeRank: o.typeRank,
           supplier: o.supplier.name,
           isMyCompany: o.supplier.isMyCompany,
           contractName: o.contractName,

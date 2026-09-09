@@ -42,7 +42,9 @@ export async function GET() {
 /**
  * DELETE /api/admin/runs
  * Body: { runId: number } — delete one platform run
- *   or: { sweepId: string } — delete every run of a sweep
+ *   or: { sweepId: string, scenarioId?: number } — delete every run of a
+ *       sweep; with scenarioId only that scenario's runs (a preset sweep
+ *       holds several scenarios under one sweepId)
  * Contract offers are removed via the onDelete: Cascade relation.
  */
 export async function DELETE(req: NextRequest) {
@@ -52,7 +54,8 @@ export async function DELETE(req: NextRequest) {
   if (body.runId != null && Number.isInteger(Number(body.runId))) {
     where = { id: Number(body.runId) };
   } else if (typeof body.sweepId === "string" && body.sweepId.length > 0) {
-    where = { sweepId: body.sweepId };
+    const scenarioId = Number(body.scenarioId);
+    where = Number.isInteger(scenarioId) && scenarioId > 0 ? { sweepId: body.sweepId, scenarioId } : { sweepId: body.sweepId };
   } else {
     return NextResponse.json({ error: "Provide runId or sweepId" }, { status: 400 });
   }

@@ -46,7 +46,11 @@ function SweepCard({
   const totalOffers = runs.reduce((s, r) => s + r.offerCount, 0);
   const realSweep = first.sweepId != null;
 
-  const del = async (payload: { runId?: number; sweepId?: string }, removedIds: number[], confirmMsg: string) => {
+  const del = async (
+    payload: { runId?: number; sweepId?: string; scenarioId?: number },
+    removedIds: number[],
+    confirmMsg: string
+  ) => {
     if (!window.confirm(confirmMsg)) return;
     setBusy(true);
     setError(null);
@@ -84,7 +88,7 @@ function SweepCard({
         <div className="flex items-center gap-2">
           {realSweep && (
             <Link
-              href={`/archive/scan?sweepId=${encodeURIComponent(first.sweepId!)}`}
+              href={`/archive/scan?sweepId=${encodeURIComponent(first.sweepId!)}&scenarioId=${first.scenario.id}`}
               className="text-xs font-medium text-emerald-700 hover:underline"
             >
               Bekijk →
@@ -95,9 +99,9 @@ function SweepCard({
             onClick={() =>
               realSweep
                 ? del(
-                    { sweepId: first.sweepId! },
+                    { sweepId: first.sweepId!, scenarioId: first.scenario.id },
                     runs.map((r) => r.id),
-                    `Hele scan van ${new Date(first.scrapedAt).toLocaleString("nl-NL")} verwijderen?\n${runs.length} runs en ${totalOffers} contracten worden definitief verwijderd.`
+                    `Scan "${scenarioLabel(first.scenario)}" van ${new Date(first.scrapedAt).toLocaleString("nl-NL")} verwijderen?\n${runs.length} runs en ${totalOffers} contracten worden definitief verwijderd.`
                   )
                 : del(
                     { runId: first.id },
@@ -171,11 +175,13 @@ export default function AdminPage() {
       });
   }, []);
 
-  // Group per sweep; legacy runs without sweepId become single-run groups.
+  // Group per sweep AND scenario (same as the archive): "Ververs alle presets"
+  // runs every preset under ONE sweepId, which must show as one scan per
+  // scenario. Legacy runs without sweepId become single-run groups.
   const sweeps = useMemo(() => {
     const g = new Map<string, AdminRun[]>();
     for (const r of runs) {
-      const key = r.sweepId ?? `run-${r.id}`;
+      const key = `${r.scenario.id}|${r.sweepId ?? `run-${r.id}`}`;
       if (!g.has(key)) g.set(key, []);
       g.get(key)!.push(r);
     }
