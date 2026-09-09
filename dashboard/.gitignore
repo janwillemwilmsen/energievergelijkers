@@ -13,8 +13,8 @@
 # testing
 /coverage
 
-# next.js
-/.next/
+# next.js (Turbopack also writes dev chunks to the nested dashboard/.next)
+.next/
 /out/
 
 # production
@@ -43,4 +43,6 @@ next-env.d.ts
 # local database + scrape logs (never ship these)
 prisma/*.db
 prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
 sweep-*.log
