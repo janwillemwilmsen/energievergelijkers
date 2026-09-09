@@ -54,8 +54,9 @@ export async function fetchOffers(input) {
       prijsPerJaar: round(p.pricing?.total, 2),
       prijsPerJaarExclKorting: round(det.bruto?.total_sum, 2),
       korting: discount ? round(discount, 2) : null,
-      tariefStroomNormaal: num(det.power?.tariff?.items?.standard),
-      tariefStroomDal: num(det.power?.tariff?.items?.low),
+      // Single meter (dal 0): the API returns one "single" item instead of standard/low.
+      tariefStroomNormaal: num(det.power?.tariff?.items?.standard ?? det.power?.tariff?.items?.single),
+      tariefStroomDal: num(det.power?.tariff?.items?.low ?? det.power?.tariff?.items?.single),
       tariefGas: num(det.gas?.tariff?.items?.single),
       vasteLeveringskostenStroomPerJaar: det.fixed_cost?.power != null ? round(det.fixed_cost.power, 2) : null,
       vasteLeveringskostenGasPerJaar: det.fixed_cost?.gas != null ? round(det.fixed_cost.gas, 2) : null,

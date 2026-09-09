@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { PLATFORMS } from "@/lib/domain";
 import { SweepApi, SweepRun } from "./useSweep";
 
@@ -39,16 +40,11 @@ function PlatformChip({ name, label, run, busy }: { name: string; label: string;
   );
 }
 
-export default function ScrapeControls({
-  scenarioId,
-  scenarioLabel,
-  sweep,
-}: {
-  scenarioId: number | null;
-  scenarioLabel: string;
-  sweep: SweepApi;
-}) {
-  const { busy, status, error, label, sweepId, start } = sweep;
+// Progress + result of the running/last sweep (the start buttons live in
+// ScenarioPicker). Renders nothing until a sweep has been started or failed
+// to start.
+export default function ScrapeControls({ sweep }: { sweep: SweepApi }) {
+  const { busy, status, error, label, sweepId, resultsHref } = sweep;
   const [log, setLog] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
 
@@ -63,26 +59,11 @@ export default function ScrapeControls({
     setShowLog((v) => !v);
   };
 
+  if (!label && !error) return null;
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          disabled={busy || scenarioId == null}
-          onClick={() => scenarioId != null && start({ scenarioId }, scenarioLabel)}
-          className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40"
-          title="Draait de 6 scrapers voor het geselecteerde scenario (standaardadres)"
-        >
-          ▶ Scrape dit scenario
-        </button>
-        <button
-          disabled={busy}
-          onClick={() => start({ presets: true }, "alle presets")}
-          className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-900 disabled:opacity-40"
-          title="Draait de 6 scrapers voor alle preset-scenario's (duurt langer)"
-        >
-          ⟳ Ververs alle presets
-        </button>
-
         {label && status && (
           <span
             className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ring-1 ${
@@ -103,12 +84,23 @@ export default function ScrapeControls({
                 : `Klaar — ${label}: ${status.succeeded} gelukt, ${status.failed} mislukt`}
           </span>
         )}
+        {resultsHref && (status?.completed ?? 0) > 0 && (
+          <Link
+            href={resultsHref}
+            className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100"
+            title={status?.done ? "Open de resultaten van deze scan" : "Open de resultaten tot nu toe (scan loopt nog)"}
+          >
+            Bekijk resultaten →
+          </Link>
+        )}
         {sweepId && (
           <button onClick={toggleLog} className="text-xs font-medium text-slate-500 underline hover:text-slate-700">
             {showLog ? "Verberg log" : "Bekijk log"}
           </button>
         )}
-        {error && <span className="text-xs text-rose-600">{error}</span>}
+        {error && (
+          <span className="rounded-md bg-rose-50 px-2.5 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-200">{error}</span>
+        )}
       </div>
 
       {label && status && (

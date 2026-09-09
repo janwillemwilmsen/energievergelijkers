@@ -21,6 +21,8 @@ export type SweepApi = {
   busy: boolean;
   label: string | null;
   sweepId: string | null;
+  /** Where the results of this sweep live: one scenario's scan page, or the archive for a multi-preset sweep. */
+  resultsHref: string | null;
   status: SweepStatus | null;
   error: string | null;
   start: (body: Record<string, unknown>, label: string) => Promise<void>;
@@ -29,7 +31,13 @@ export type SweepApi = {
 /** Shared sweep launcher + progress poller (one active sweep per page).
  *  The last result stays visible until the next sweep starts. */
 export function useSweep(onDataChanged: () => void): SweepApi {
-  const [sweep, setSweep] = useState<{ sweepId: string; expected: number; label: string; done: boolean } | null>(null);
+  const [sweep, setSweep] = useState<{
+    sweepId: string;
+    expected: number;
+    label: string;
+    done: boolean;
+    scenarioId: number | null;
+  } | null>(null);
   const [status, setStatus] = useState<SweepStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -51,7 +59,13 @@ export function useSweep(onDataChanged: () => void): SweepApi {
       return;
     }
     startedAt.current = Date.now();
-    setSweep({ sweepId: j.sweepId, expected: j.expectedRuns, label, done: false });
+    setSweep({
+      sweepId: j.sweepId,
+      expected: j.expectedRuns,
+      label,
+      done: false,
+      scenarioId: typeof body.scenarioId === "number" ? body.scenarioId : null,
+    });
     setStatus({ completed: 0, succeeded: 0, failed: 0, expected: j.expectedRuns, done: false, runs: [] });
   };
 
@@ -83,6 +97,11 @@ export function useSweep(onDataChanged: () => void): SweepApi {
     busy: sweep != null && !sweep.done && !(status?.done ?? false),
     label: sweep?.label ?? null,
     sweepId: sweep?.sweepId ?? null,
+    resultsHref: sweep
+      ? sweep.scenarioId != null
+        ? `/archive/scan?sweepId=${encodeURIComponent(sweep.sweepId)}&scenarioId=${sweep.scenarioId}`
+        : "/archive"
+      : null,
     status,
     error,
     start,

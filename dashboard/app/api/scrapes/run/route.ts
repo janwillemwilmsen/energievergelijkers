@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { openSync } from "node:fs";
 import path from "node:path";
 import { prisma } from "@/lib/db";
+import { PRESET_COOLDOWN_HOURS, presetCooldown } from "@/lib/presets";
 
 /**
  * POST /api/scrapes/run
@@ -15,6 +16,11 @@ import { prisma } from "@/lib/db";
  *   -> sweep for that scenario, optionally for a specific address
  *   or: { presets: true }        -> re-run every preset scenario (/admin/presets)
  *
+ * Preset scans on the default address are rate-limited: at most once per
+ * PRESET_COOLDOWN_HOURS (per preset; "all presets" looks at the most recent
+ * preset run). A blocked request answers 429 with { error, lastRunAt,
+ * nextAllowedAt }. Custom scenarios and explicit addresses are not limited.
+ *
  * Returns { sweepId, expectedRuns } for progress polling via /api/scrapes/status.
  */
 export async function POST(req: NextRequest) {
@@ -25,15 +31,53 @@ export async function POST(req: NextRequest) {
   let args: string[];
   let expectedRuns: number;
 
+  const pc =
+    typeof body.postcode === "string" && /^\d{4}[A-Za-z]{2}$/.test(body.postcode.replace(/\s+/g, ""))
+      ? body.postcode.replace(/\s+/g, "").toUpperCase()
+      : null;
+  const nr = body.huisnr != null && /^\d+$/.test(String(body.huisnr)) ? String(body.huisnr) : null;
+  const explicitAddress = pc != null && nr != null;
+
+  const cooldownReply = (lastRunAt: Date, nextAllowedAt: Date, what: string) =>
+    NextResponse.json(
+      {
+        error:
+          `${what} voor het laatst gescand op ${fmtNl(lastRunAt)}; presets mogen eens per ${PRESET_COOLDOWN_HOURS} uur. ` +
+          `Volgende scan mogelijk vanaf ${fmtNl(nextAllowedAt)}.`,
+        lastRunAt,
+        nextAllowedAt,
+      },
+      { status: 429 }
+    );
+
   if (body.presets) {
     const presetCount = await prisma.scenario.count({ where: { isPreset: true } });
     if (presetCount === 0)
       return NextResponse.json({ error: "Geen presets geconfigureerd (zie /admin/presets)" }, { status: 400 });
+    if (!explicitAddress) {
+      const latest = await prisma.scrapeRun.findFirst({
+        where: { status: "completed", scenario: { isPreset: true } },
+        orderBy: { scrapedAt: "desc" },
+        select: { scrapedAt: true },
+      });
+      const cd = presetCooldown(latest?.scrapedAt ?? null);
+      if (cd.blocked && latest) return cooldownReply(latest.scrapedAt, cd.nextAllowedAt!, "De presets zijn");
+    }
     args = [script, "--scenario", "all", "--sweep-id", sweepId];
     expectedRuns = presetCount * 6;
   } else if (body.scenarioId) {
     const sc = await prisma.scenario.findUnique({ where: { id: Number(body.scenarioId) } });
     if (!sc) return NextResponse.json({ error: "Unknown scenarioId" }, { status: 404 });
+    if (sc.isPreset && !explicitAddress) {
+      const latest = await prisma.scrapeRun.findFirst({
+        where: { status: "completed", scenarioId: sc.id },
+        orderBy: { scrapedAt: "desc" },
+        select: { scrapedAt: true },
+      });
+      const cd = presetCooldown(latest?.scrapedAt ?? null);
+      if (cd.blocked && latest)
+        return cooldownReply(latest.scrapedAt, cd.nextAllowedAt!, `Preset "${sc.label ?? sc.name}" is`);
+    }
     args = sc.isPreset && sc.name
       ? [script, "--scenario", sc.name, "--sweep-id", sweepId]
       : [
@@ -49,11 +93,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Provide scenarioId or presets:true" }, { status: 400 });
   }
 
-  const pc =
-    typeof body.postcode === "string" && /^\d{4}[A-Za-z]{2}$/.test(body.postcode.replace(/\s+/g, ""))
-      ? body.postcode.replace(/\s+/g, "").toUpperCase()
-      : null;
-  const nr = body.huisnr != null && /^\d+$/.test(String(body.huisnr)) ? String(body.huisnr) : null;
   if (pc && nr) args.push("--postcode", pc, "--huisnr", nr);
 
   const log = openSync(path.join(process.cwd(), `sweep-${sweepId.replace(/[:]/g, "-")}.log`), "a");
@@ -74,3 +113,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ sweepId, expectedRuns, pid: child.pid });
 }
+
+const fmtNl = (d: Date) =>
+  d.toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Amsterdam" });

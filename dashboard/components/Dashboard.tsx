@@ -10,6 +10,7 @@ import { scenarioLabel } from "@/lib/scenarioLabel";
 
 export default function Dashboard() {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [cooldownHours, setCooldownHours] = useState(12);
   const [scenarioId, setScenarioId] = useState<number | null>(null);
   const [overview, setOverview] = useState<{ myCompany: string | null; cards: OverviewCard[] } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,6 +18,7 @@ export default function Dashboard() {
   const loadScenarios = useCallback(async () => {
     const r = await fetch("/api/scenarios").then((x) => x.json());
     setScenarios(r.scenarios);
+    if (r.presetCooldownHours) setCooldownHours(r.presetCooldownHours);
     if (r.scenarios.length && scenarioId == null) {
       // "medium" if it still exists, else the first preset (/api/scenarios is preset-ordered).
       const medium = r.scenarios.find((s: Scenario) => s.name === "medium");
@@ -52,9 +54,11 @@ export default function Dashboard() {
     loadData(true);
   });
 
-  const onScenarioCreated = async (id: number) => {
+  // A custom scrape ("Eigen scrape") does not switch the dashboard to that
+  // scenario — the card stays on the presets; its results open via the
+  // "Bekijk resultaten" link in the sweep status.
+  const onScenarioCreated = async () => {
     await loadScenarios();
-    setScenarioId(id);
   };
 
   const activeScenario = scenarios.find((s) => s.id === scenarioId) ?? null;
@@ -86,15 +90,19 @@ export default function Dashboard() {
         )}
       </header>
 
-      <ScenarioPicker scenarios={scenarios} activeId={scenarioId} onSelect={setScenarioId} />
+      <ScenarioPicker
+        scenarios={scenarios}
+        activeId={scenarioId}
+        onSelect={setScenarioId}
+        cooldownHours={cooldownHours}
+        busy={sweep.busy}
+        onScrapeScenario={(s) => sweep.start({ scenarioId: s.id }, scenarioLabel(s))}
+        onScrapeAllPresets={() => sweep.start({ presets: true }, "alle presets")}
+      />
+
+      <ScrapeControls sweep={sweep} />
 
       <ScrapeForm sweep={sweep} onScenarioCreated={onScenarioCreated} />
-
-      <ScrapeControls
-        scenarioId={scenarioId}
-        scenarioLabel={activeScenario ? scenarioLabel(activeScenario) : "scenario"}
-        sweep={sweep}
-      />
 
       {loading ? (
         <div className="py-24 text-center text-slate-400">Laden…</div>

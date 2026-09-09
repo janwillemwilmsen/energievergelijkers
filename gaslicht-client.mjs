@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 // Gaslicht.com comparison client — derived from a recorded HAR (2026-08-26).
 // ASP.NET form flow + HTML scraping (no JSON API):
-//   GET /  -> cookies + __RequestVerificationToken; POST /energievergelijker/start;
-//   GET /energievergelijken/resultaten?partial=true&ContractType=...&take=100 (XHR)
-//   GET <product>/price-details (XHR fragment) for the tariffs per offer.
+//   GET /  -> cookies + __RequestVerificationToken; POST /energievergelijker/start
+//     -> 302 to the results page: /energievergelijken/resultaten (stroom + gas)
+//        or /stroom-vergelijken/resultaten (alleen stroom, isNoGas). ALWAYS use
+//        that Location: the stroom+gas path also answers for a no-gas session,
+//        but then lists dual-fuel products priced with a default gas usage.
+//   GET <results>?partial=true&ContractType=...&take=100 (XHR)
+//   GET /energievergelijker/energie/<provider>/<slug>/price-details (XHR
+//     fragment) for the tariffs per offer — same path for both product kinds.
 // Fetches ALL contract types (Vast 1/2+ jaar, Dynamisch, Combinatie, Variabel);
 // filtering happens uniformly in energy-lib. Supports teruglevering
 // (terugstroomhoog/-laag + solar-panels) and alleen stroom (isNoGas).
@@ -93,9 +98,17 @@ export async function fetchOffers(input) {
   storeCookies(post);
   if (post.status >= 400) throw new Error(`POST /energievergelijker/start -> ${post.status}`);
 
-  await get("/energievergelijken/resultaten"); // establish comparison in session
+  // The redirect target is the results page matching the request (see header).
+  const location = post.headers.get("location") ?? "";
+  const resultsPath = location.startsWith("/") && /resultaten/.test(location)
+    ? location.split("?")[0]
+    : input.gas === 0 ? "/stroom-vergelijken/resultaten" : "/energievergelijken/resultaten";
+  if (input.gas === 0 && !/stroom-vergelijken/.test(resultsPath))
+    throw new Error(`alleen-stroom request landed on ${resultsPath} (expected /stroom-vergelijken/...)`);
+
+  await get(resultsPath); // establish comparison in session
   const q = new URLSearchParams({ partial: "true", ContractType: ALL_CONTRACT_TYPES, skip: "0", take: "100" });
-  const html = await get(`/energievergelijken/resultaten?${q}`, { xhr: true });
+  const html = await get(`${resultsPath}?${q}`, { xhr: true });
 
   const records = [];
   const seen = new Set();
@@ -119,7 +132,9 @@ export async function fetchOffers(input) {
       : "Vast";
 
     // Tariff fragment via the card's own product link (tab data-urls misalign).
-    const link = block.match(/href="\/energie-vergelijken\/([^/"]+)\/([a-z0-9-]+-\d+)\?/);
+    // Dual-fuel cards link to /energie-vergelijken/..., stroom-only cards to
+    // /stroom-vergelijken/...; the price-details endpoint is the same.
+    const link = block.match(/href="\/(?:energie|stroom)-vergelijken\/([^/"]+)\/([a-z0-9-]+-\d+)\?/);
     let t = {};
     if (link) {
       try {

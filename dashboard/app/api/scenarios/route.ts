@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { SCENARIO_ORDER } from "@/lib/presets";
+import { PRESET_COOLDOWN_HOURS, SCENARIO_ORDER } from "@/lib/presets";
 
-/** GET /api/scenarios — presets first, then customs; each with run info. */
+/** GET /api/scenarios — presets first, then customs; each with run info
+ *  (runCount, lastRunAt = latest completed run) + the preset cooldown. */
 export async function GET() {
   const scenarios = await prisma.scenario.findMany({
     orderBy: SCENARIO_ORDER,
-    include: { _count: { select: { runs: true } } },
+    include: {
+      _count: { select: { runs: true } },
+      runs: { where: { status: "completed" }, orderBy: { scrapedAt: "desc" }, take: 1, select: { scrapedAt: true } },
+    },
   });
   return NextResponse.json({
+    presetCooldownHours: PRESET_COOLDOWN_HOURS,
     scenarios: scenarios.map((s) => ({
       id: s.id,
       name: s.name,
@@ -19,6 +24,7 @@ export async function GET() {
       solarFeedIn: s.solarFeedIn,
       isPreset: s.isPreset,
       runCount: s._count.runs,
+      lastRunAt: s.runs[0]?.scrapedAt ?? null,
     })),
   });
 }

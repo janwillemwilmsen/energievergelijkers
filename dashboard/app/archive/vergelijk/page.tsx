@@ -7,10 +7,12 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
   ResponsiveContainer,
+  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -72,7 +74,7 @@ function RankTip({
     const d = det[hover];
     return (
       <div className="max-w-72 rounded-md bg-white p-2.5 text-xs shadow-lg ring-1 ring-slate-200">
-        <div className="text-[10px] text-slate-400">{dateStr}</div>
+        <div className="text-[10px] text-slate-600">{dateStr}</div>
         <div className="font-semibold text-slate-900">
           <span
             className="mr-1.5 inline-block h-2 w-2 rounded-full"
@@ -85,7 +87,7 @@ function RankTip({
             <div className="truncate text-slate-500" title={d.contract}>{d.contract}</div>
             <div className="mt-0.5 text-slate-600">€{d.cost}/jaar · {d.type}</div>
             {d.overallRank !== Number(hovered.value) && (
-              <div className="mt-0.5 text-[10px] text-slate-400">#{d.overallRank} in de volledige lijst</div>
+              <div className="mt-0.5 text-[10px] text-slate-600">#{d.overallRank} in de volledige lijst</div>
             )}
           </>
         )}
@@ -98,7 +100,7 @@ function RankTip({
   const shown = rows.slice(0, 12);
   return (
     <div className="rounded-md bg-white p-2.5 text-xs shadow-lg ring-1 ring-slate-200">
-      <div className="mb-1 text-[10px] text-slate-400">{dateStr} · wijs een lijn aan voor contract &amp; prijs</div>
+      <div className="mb-1 text-[10px] text-slate-600">{dateStr} · wijs een lijn aan voor contract &amp; prijs</div>
       {shown.map((p) => {
         const d = det[String(p.dataKey)];
         return (
@@ -129,7 +131,11 @@ type OverviewPoint = {
   myRank: number | null;
   myDelta: number | null;
   avgElec: number | null;
+  minElec: number | null;
+  maxElec: number | null;
   avgGas: number | null;
+  minGas: number | null;
+  maxGas: number | null;
   avgRating: number | null;
   vast: number;
   variabel: number;
@@ -139,39 +145,269 @@ type OverviewSeries = { platform: string; label: string; points: OverviewPoint[]
 
 // Metrics for the cross-platform chart. `rank` inverts the y-axis (#1 on top);
 // nullable metrics show gaps where a run had no data for them (own brand
-// absent, platform without tariffs/ratings).
+// absent, platform without tariffs/ratings). `decimals` drives the y-axis:
+// tariffs (€0,28–€0,31) and ratings (7,5–8,9) need decimal ticks, otherwise
+// recharts collapses the axis onto a single integer.
+const TARIFF_NOTE =
+  "All-in tarief (incl. btw en energiebelasting) zoals de vergelijker het toont. Pricewise toont alleen leveringstarieven en ontbreekt daarom.";
 const METRICS = [
-  { key: "cheapest", label: "Laagste jaarprijs", kind: "eur" },
-  { key: "avg", label: "Gem. jaarprijs", kind: "eur" },
-  { key: "myRank", label: "Eigen rank", kind: "rank" },
-  { key: "myDelta", label: "Eigen merk vs. goedkoopste", kind: "eur" },
-  { key: "maxCashback", label: "Max. cashback", kind: "eur" },
-  { key: "count", label: "Aantal contracten", kind: "num" },
-  { key: "avgElec", label: "Gem. stroomtarief", kind: "eur4" },
-  { key: "avgGas", label: "Gem. gastarief", kind: "eur4" },
-  { key: "avgRating", label: "Gem. beoordeling", kind: "score" },
+  { key: "cheapest", label: "Goedkoopste contract", unit: "€/jaar", kind: "eur", decimals: 0, lowerIsBetter: null,
+    help: "Verwachte jaarkosten (incl. eenmalige korting) van het goedkoopste contract dat de vergelijker toont voor dit scenario. Laat zien hoe scherp de markt op elke vergelijker is en of de bodemprijs stijgt of daalt." },
+  { key: "avg", label: "Gemiddelde jaarprijs", unit: "€/jaar", kind: "eur", decimals: 0, lowerIsBetter: null,
+    help: "Gemiddelde verwachte jaarkosten (incl. korting) over alle getoonde contracten. Verschil met het goedkoopste contract = hoe breed de prijsspreiding is." },
+  { key: "myRank", label: "Rank eigen merk", unit: "positie", kind: "rank", decimals: 0, lowerIsBetter: true,
+    help: "Positie van het beste eigen contract in de prijsgesorteerde lijst (#1 = goedkoopste). Bij een contracttype-filter wordt geteld binnen die types. Gaten in de lijn = eigen merk stond niet in de lijst." },
+  { key: "myDelta", label: "Eigen merk t.o.v. goedkoopste", unit: "€/jaar", kind: "eur", decimals: 0, lowerIsBetter: true,
+    help: "Jaarkosten van het beste eigen contract minus die van het goedkoopste contract in de lijst. €0 = wij zijn de goedkoopste; €150 = een klant betaalt bij ons €150/jaar meer dan bij de koploper." },
+  { key: "maxCashback", label: "Hoogste cashback", unit: "€", kind: "eur", decimals: 0, lowerIsBetter: null,
+    help: "Grootste eenmalige welkomstkorting/cashback die een contract in de lijst biedt. Stijgt dit, dan wordt er harder met kortingen gevochten." },
+  { key: "count", label: "Aantal contracten", unit: "stuks", kind: "num", decimals: 0, lowerIsBetter: null,
+    help: "Hoeveel contracten de vergelijker toont voor dit scenario (binnen het contracttype-filter). Een sprong betekent meestal dat er leveranciers of producten bij zijn gekomen of zijn verdwenen." },
+  { key: "avgElec", label: "Gemiddeld stroomtarief", unit: "€/kWh", kind: "eur", decimals: 4, lowerIsBetter: null,
+    help: "Gemiddeld stroomtarief (normaal) over alle contracten in de lijst. " + TARIFF_NOTE },
+  { key: "minElec", label: "Laagste stroomtarief", unit: "€/kWh", kind: "eur", decimals: 4, lowerIsBetter: null,
+    help: "Laagste stroomtarief (normaal) dat een contract in de lijst rekent. " + TARIFF_NOTE },
+  { key: "maxElec", label: "Hoogste stroomtarief", unit: "€/kWh", kind: "eur", decimals: 4, lowerIsBetter: null,
+    help: "Hoogste stroomtarief (normaal) dat een contract in de lijst rekent. " + TARIFF_NOTE },
+  { key: "avgGas", label: "Gemiddeld gastarief", unit: "€/m³", kind: "eur", decimals: 4, lowerIsBetter: null,
+    help: "Gemiddeld gastarief over alle contracten in de lijst (alleen contracten met gas). " + TARIFF_NOTE },
+  { key: "minGas", label: "Laagste gastarief", unit: "€/m³", kind: "eur", decimals: 4, lowerIsBetter: null,
+    help: "Laagste gastarief dat een contract in de lijst rekent. " + TARIFF_NOTE },
+  { key: "maxGas", label: "Hoogste gastarief", unit: "€/m³", kind: "eur", decimals: 4, lowerIsBetter: null,
+    help: "Hoogste gastarief dat een contract in de lijst rekent. " + TARIFF_NOTE },
+  { key: "avgRating", label: "Gemiddelde beoordeling", unit: "cijfer", kind: "score", decimals: 2, lowerIsBetter: false,
+    help: "Gemiddelde klantbeoordeling (1–10) van de contracten in de lijst, zoals de vergelijker die toont. Niet elke vergelijker toont een cijfer." },
 ] as const;
 type MetricKey = (typeof METRICS)[number]["key"];
 
 const fmtDay = (t: number) => new Date(t).toLocaleDateString("nl-NL", { day: "2-digit", month: "2-digit" });
 
+type Metric = (typeof METRICS)[number];
+
+const eur0 = (v: number | null) => (v == null ? "—" : `€${Math.round(v)}`);
+const eur4 = (v: number | null) => (v == null ? "—" : `€${v.toFixed(4)}`);
+const range4 = (lo: number | null, avg: number | null, hi: number | null) =>
+  lo == null || hi == null ? "—" : `${eur4(lo)} – ${eur4(hi)} · gem. ${eur4(avg)}`;
+
+// Hover panel for the cross-platform chart. Every line has its own data
+// array with its own scrape times, so recharts' axis tooltip snaps to the
+// first line's timestamps and always reports that platform, and it has no
+// per-item tooltips for lines. So the dots are Scatter symbols with their own
+// mouse handlers, and this panel is positioned by the chart itself. It shows
+// the hovered scan in full: every metric, the type mix and the change vs the
+// previous scan of the same platform.
+type HoverDot = { platform: string; t: number; x: number; y: number };
+
+function CrossTip({
+  hover,
+  series,
+  m,
+  fmt,
+}: {
+  hover: HoverDot;
+  series: OverviewSeries[];
+  m: Metric;
+  fmt: (v: number) => string;
+}) {
+  const s = series.find((x) => x.platform === hover.platform);
+  const idx = s ? s.points.findIndex((pt) => pt.t === hover.t) : -1;
+  if (!s || idx < 0) return null;
+  const entries = [{ s, t: hover.t, point: s.points[idx], prev: idx > 0 ? s.points[idx - 1] : null }];
+  const t = hover.t;
+
+  const row = (k: string, v: string) => (
+    <div key={k} className="flex justify-between gap-6">
+      <span className="whitespace-nowrap text-slate-600">{k}</span>
+      <span className="whitespace-nowrap text-right tabular-nums text-slate-900">{v}</span>
+    </div>
+  );
+
+  return (
+    <div className="rounded-md bg-white p-3 text-xs shadow-lg ring-1 ring-slate-200">
+      <div className="mb-1 font-medium text-slate-700">
+        {new Date(t).toLocaleString("nl-NL", { dateStyle: "medium", timeStyle: "short" })}
+      </div>
+      {entries.map(({ s, point, prev }, i) => {
+        const cur = point[m.key];
+        const before = prev ? prev[m.key] : null;
+        const delta =
+          typeof cur === "number" && typeof before === "number"
+            ? Math.round((cur - before) * 10 ** m.decimals) / 10 ** m.decimals
+            : null;
+        const mix = `${point.vast} vast · ${point.variabel} variabel · ${point.dynamisch} dynamisch`;
+        return (
+          <div key={s.platform} className={i > 0 ? "mt-2 border-t border-slate-200 pt-2" : ""}>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="font-semibold text-slate-900">
+                <span className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ background: platformColor(s.platform).hex }} />
+                {s.label}
+              </span>
+              <span className="font-semibold tabular-nums text-slate-900">
+                {m.label}: {typeof cur === "number" ? fmt(cur) : "—"}
+                {delta != null && delta !== 0 && (
+                  <span className="ml-1 font-normal text-slate-700">
+                    ({delta > 0 ? "▲" : "▼"} {m.kind === "rank" ? Math.abs(delta) : fmt(Math.abs(delta))} t.o.v. vorige scan)
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="mt-1 grid gap-y-0.5">
+              {row("Contracten", String(point.count))}
+              {row("Verdeling", mix)}
+              {row("Goedkoopste", `${eur0(point.cheapest)}/jr`)}
+              {row("Gemiddeld", `${eur0(point.avg)}/jr`)}
+              {row("Hoogste cashback", eur0(point.maxCashback))}
+              {row("Eigen rank", point.myRank != null ? `#${point.myRank} van ${point.count}` : "niet in lijst")}
+              {row("Eigen merk vs. goedkoopste", point.myDelta != null ? `+${eur0(point.myDelta)}/jr` : "—")}
+              {row("Stroomtarief", range4(point.minElec, point.avgElec, point.maxElec))}
+              {row("Gastarief", range4(point.minGas, point.avgGas, point.maxGas))}
+              {row("Beoordeling", point.avgRating != null ? point.avgRating.toFixed(2) : "—")}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
+
+// Numbers behind the cross-platform chart for the selected metric: per
+// platform the latest value, the change vs the previous scan and vs the start
+// of the window, and the low/high over the window.
+function MetricSummaryTable({
+  series,
+  m,
+  fmt,
+}: {
+  series: OverviewSeries[];
+  m: Metric;
+  fmt: (v: number) => string;
+}) {
+  const rows = series
+    .map((s) => {
+      const vals = s.points.map((p) => p[m.key]).filter((v): v is number => typeof v === "number");
+      const latestPoint = [...s.points].reverse().find((p) => typeof p[m.key] === "number");
+      return {
+        platform: s.platform,
+        label: s.label,
+        latest: vals.length ? vals[vals.length - 1] : null,
+        latestAt: latestPoint?.t ?? null,
+        prev: vals.length > 1 ? vals[vals.length - 2] : null,
+        first: vals.length ? vals[0] : null,
+        min: vals.length ? Math.min(...vals) : null,
+        max: vals.length ? Math.max(...vals) : null,
+        scans: vals.length,
+        total: s.points.length,
+      };
+    })
+    .sort((a, b) => (a.latest ?? Infinity) - (b.latest ?? Infinity) || a.label.localeCompare(b.label));
+
+  const delta = (from: number | null, to: number | null) => {
+    if (from == null || to == null) return <span className="text-slate-500">—</span>;
+    const d = Math.round((to - from) * 10 ** m.decimals) / 10 ** m.decimals;
+    if (d === 0) return <span className="text-slate-600">=</span>;
+    const good = m.lowerIsBetter == null ? null : m.lowerIsBetter ? d < 0 : d > 0;
+    const color = good == null ? "text-slate-700" : good ? "text-emerald-600" : "text-rose-600";
+    const abs = m.kind === "rank" ? String(Math.abs(d)) : fmt(Math.abs(d));
+    return (
+      <span className={`font-medium ${color}`}>
+        {d > 0 ? "▲" : "▼"} {abs}
+      </span>
+    );
+  };
+  const cell = (v: number | null) => (v == null ? <span className="text-slate-500">—</span> : fmt(v));
+
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full min-w-[640px] text-xs">
+        <thead>
+          <tr className="border-b border-slate-100 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+            <th className="px-2 py-1.5 text-left">Vergelijker</th>
+            <th className="px-2 py-1.5 text-right">Laatste scan</th>
+            <th className="px-2 py-1.5 text-right">Δ vorige scan</th>
+            <th className="px-2 py-1.5 text-right">Δ begin periode</th>
+            <th className="px-2 py-1.5 text-right">Laagste</th>
+            <th className="px-2 py-1.5 text-right">Hoogste</th>
+            <th className="px-2 py-1.5 text-right">Scans</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.platform} className="border-b border-slate-50">
+              <td className="px-2 py-1.5 font-medium" style={{ color: platformColor(r.platform).hex }}>
+                {r.label.split(".")[0]}
+                {r.latestAt != null && (
+                  <span className="ml-1.5 font-normal text-slate-600">{fmtDay(r.latestAt)}</span>
+                )}
+              </td>
+              <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-slate-900">{cell(r.latest)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{delta(r.prev, r.latest)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums">{delta(r.first, r.latest)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{cell(r.min)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">{cell(r.max)}</td>
+              <td className="px-2 py-1.5 text-right tabular-nums text-slate-500">
+                {r.scans}/{r.total}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-slate-600">
+        Gesorteerd op laatste waarde · Δ = verandering (▲ hoger, ▼ lager)
+        {m.lowerIsBetter != null && "; groen = gunstig voor het eigen merk"} · laagste/hoogste = over de hele periode
+      </p>
+    </div>
+  );
+}
+
 // One chart, six platform-colored lines, pill-switchable metric. Each line has
 // its own data array because the six platforms are scraped at slightly
-// different moments — the x-axis is numeric time.
-function CrossPlatformChart({ series }: { series: OverviewSeries[] }) {
+// different moments — the x-axis is numeric time. The chart has its own
+// contract-type filter (starts as the page filter, see `key` at the call site)
+// and fetches its own data, so e.g. "vast" up top and "dynamisch" here can be
+// compared side by side.
+function CrossPlatformChart({
+  scenarioId,
+  days,
+  initialTypes,
+}: {
+  scenarioId: number;
+  days: number;
+  initialTypes: Set<string>;
+}) {
   const [metric, setMetric] = useState<MetricKey>("cheapest");
+  const [types, setTypes] = useState<Set<string>>(initialTypes);
+  const [series, setSeries] = useState<OverviewSeries[] | null>(null);
+  const [hover, setHover] = useState<HoverDot | null>(null);
+  const [chartWidth, setChartWidth] = useState(0);
+  const typesKey = [...types].sort().join(",");
+
+  useEffect(() => {
+    let stale = false;
+    fetch(`/api/trends/overview?scenarioId=${scenarioId}&days=${days}${typesKey ? `&types=${typesKey}` : ""}`)
+      .then((x) => x.json())
+      .then((r) => {
+        if (!stale) setSeries(r.series ?? []);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [scenarioId, days, typesKey]);
+
   const m = METRICS.find((x) => x.key === metric)!;
-  const fmt = (v: number) =>
-    m.kind === "eur" ? `€${v}`
-    : m.kind === "eur4" ? `€${v.toFixed(4)}`
+  const fmt = (v: number, decimals: number = m.decimals) =>
+    m.kind === "eur" ? `€${v.toFixed(decimals)}`
     : m.kind === "rank" ? `#${v}`
-    : m.kind === "score" ? v.toFixed(2)
+    : m.kind === "score" ? v.toFixed(decimals)
     : String(v);
-  const hasData = series.some((s) => s.points.length > 0);
+  const hasData = (series ?? []).some((s) => s.points.length > 0);
+  const scope = typesKey ? typesKey.split(",").join(" + ") : "alle contracttypes";
+
   return (
     <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Meting</span>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">Meting</span>
         {METRICS.map((opt) => (
           <button
             key={opt.key}
@@ -179,62 +415,131 @@ function CrossPlatformChart({ series }: { series: OverviewSeries[] }) {
             className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
               metric === opt.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
             }`}
+            title={opt.help}
           >
             {opt.label}
           </button>
         ))}
       </div>
-      {!hasData ? (
-        <div className="py-16 text-center text-sm text-slate-400">Geen data voor deze periode</div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">Contracttype</span>
+        {TYPE_OPTIONS.map((t) => (
+          <button
+            key={t}
+            onClick={() =>
+              setTypes((prev) => {
+                const next = new Set(prev);
+                if (next.has(t)) next.delete(t);
+                else next.add(t);
+                return next;
+              })
+            }
+            className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+              types.has(t) ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+            title="Filtert alleen deze grafiek (geen selectie = alle types)"
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-sm font-semibold text-slate-800">
+          {m.label} <span className="font-normal text-slate-600">({m.unit})</span>
+          <span className="ml-2 text-xs font-normal text-slate-500">— per vergelijker, {scope}</span>
+        </div>
+      </div>
+      <p className="mb-2 text-[11px] text-slate-500">{m.help}</p>
+
+      {series == null ? (
+        <div className="py-16 text-center text-sm text-slate-600">Laden…</div>
+      ) : !hasData ? (
+        <div className="py-16 text-center text-sm text-slate-600">Geen data voor deze periode / dit contracttype</div>
       ) : (
-        <ResponsiveContainer width="100%" height={340}>
-          <LineChart margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+        <div className="relative">
+        <ResponsiveContainer width="100%" height={340} onResize={(w) => setChartWidth(w)}>
+          <ComposedChart margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis
               dataKey="t"
               type="number"
               domain={["dataMin", "dataMax"]}
-              tick={{ fontSize: 11, fill: "#94a3b8" }}
+              tick={{ fontSize: 11, fill: "#475569" }}
               tickFormatter={fmtDay}
             />
             <YAxis
               reversed={m.kind === "rank"}
               domain={m.kind === "rank" ? [1, "auto"] : ["auto", "auto"]}
-              allowDecimals={false}
-              tick={{ fontSize: 11, fill: "#94a3b8" }}
-              tickFormatter={(v: number) => fmt(v)}
-            />
-            <Tooltip
-              labelFormatter={(t) => new Date(Number(t)).toLocaleString("nl-NL", { dateStyle: "medium", timeStyle: "short" })}
-              formatter={(value) => [fmt(Number(value)), undefined]}
+              allowDecimals={m.decimals > 0}
+              width={m.decimals >= 4 ? 72 : 56}
+              tick={{ fontSize: 11, fill: "#475569" }}
+              tickFormatter={(v: number) => fmt(v, Math.min(m.decimals, 3))}
+              label={{ value: m.unit, angle: -90, position: "insideLeft", fontSize: 10, fill: "#475569" }}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             {series.map((s) => (
               <Line
                 key={s.platform}
-                data={s.points.map((p) => ({ t: p.t, [s.label]: p[metric] }))}
+                data={s.points.map((p) => ({ t: p.t, v: p[metric] }))}
                 type="monotone"
-                dataKey={s.label}
+                dataKey="v"
                 name={s.label.split(".")[0]}
                 stroke={platformColor(s.platform).hex}
                 strokeWidth={2}
-                dot={{ r: 2.5 }}
+                dot={false}
+                activeDot={false}
                 connectNulls={false}
               />
             ))}
-          </LineChart>
+            {series.map((s) => (
+              <Scatter
+                key={`${s.platform}-dots`}
+                data={s.points.filter((p) => typeof p[metric] === "number").map((p) => ({ t: p.t, v: p[metric], platform: s.platform }))}
+                dataKey="v"
+                name={s.label.split(".")[0]}
+                fill={platformColor(s.platform).hex}
+                legendType="none"
+                shape={(props: { cx?: number; cy?: number; payload?: { t?: number } }) => {
+                  const on = hover?.platform === s.platform && hover.t === props.payload?.t;
+                  return (
+                    <circle
+                      cx={props.cx}
+                      cy={props.cy}
+                      r={on ? 6.5 : 4}
+                      fill={platformColor(s.platform).hex}
+                      stroke="#fff"
+                      strokeWidth={1.5}
+                      style={{ cursor: "pointer" }}
+                      onMouseEnter={() =>
+                        typeof props.payload?.t === "number" &&
+                        setHover({ platform: s.platform, t: props.payload.t, x: props.cx ?? 0, y: props.cy ?? 0 })
+                      }
+                      onMouseLeave={() => setHover(null)}
+                    />
+                  );
+                }}
+                isAnimationActive={false}
+              />
+            ))}
+          </ComposedChart>
         </ResponsiveContainer>
+        {hover && (
+          <div
+            className="pointer-events-none absolute z-10"
+            style={{
+              // right of the dot, or left of it in the right part of the chart;
+              // below the dot in the upper half, above it in the lower half
+              ...(chartWidth && hover.x > chartWidth * 0.55 ? { right: chartWidth - hover.x + 12 } : { left: hover.x + 12 }),
+              ...(hover.y > 170 ? { bottom: 340 - hover.y + 12 } : { top: Math.max(0, hover.y - 12) }),
+            }}
+          >
+            <CrossTip hover={hover} series={series} m={m} fmt={(v) => fmt(v)} />
+          </div>
+        )}
+        </div>
       )}
-      {metric === "myDelta" && (
-        <p className="mt-1 text-[11px] text-slate-400">
-          €0 = eigen merk is de goedkoopste op die vergelijker; gaten = eigen merk stond er niet in.
-        </p>
-      )}
-      {(metric === "avgElec" || metric === "avgGas") && (
-        <p className="mt-1 text-[11px] text-slate-400">
-          All-in tarieven (incl. btw en energiebelasting); Pricewise toont alleen leveringstarieven en ontbreekt daarom.
-        </p>
-      )}
+      {series != null && hasData && <MetricSummaryTable series={series} m={m} fmt={(v) => fmt(v)} />}
     </div>
   );
 }
@@ -616,10 +921,15 @@ function VergelijkInner() {
 
       {overview && overview.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Vergelijkers naast elkaar over tijd
           </h2>
-          <CrossPlatformChart series={overview} />
+          <p className="mb-2 text-xs text-slate-600">
+            Eén meting, één lijn per vergelijker, over de gekozen periode ({days} dagen). Deze grafiek heeft een eigen
+            contracttype-filter (start gelijk aan het filter bovenaan).
+          </p>
+          {/* key: a change of the page-level type filter resets the chart's own filter to it */}
+          <CrossPlatformChart key={typesKey} scenarioId={scenarioId} days={days} initialTypes={typeSel} />
         </section>
       )}
 

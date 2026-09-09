@@ -6,8 +6,8 @@ import { prisma } from "@/lib/db";
  * Per-platform aggregate time series over all completed runs in the window,
  * for cross-platform comparison charts. Returns
  * { series: [{ platform, label, points: [{ t, cheapest, avg, count,
- *   maxCashback, myRank, myDelta, avgElec, avgGas, avgRating,
- *   vast, variabel, dynamisch }] }] }
+ *   maxCashback, myRank, myDelta, avgElec, minElec, maxElec, avgGas, minGas,
+ *   maxGas, avgRating, vast, variabel, dynamisch }] }] }
  * where t = epoch ms, myRank = own brand's best rank in that run (null when
  * absent) and myDelta = own brand's best annual cost minus the run's cheapest.
  * With a types filter, myRank is re-ranked within the selected types (offers
@@ -58,7 +58,11 @@ export async function GET(req: NextRequest) {
     myRank: number | null;
     myDelta: number | null;
     avgElec: number | null;
+    minElec: number | null;
+    maxElec: number | null;
     avgGas: number | null;
+    minGas: number | null;
+    maxGas: number | null;
     avgRating: number | null;
     vast: number;
     variabel: number;
@@ -74,6 +78,9 @@ export async function GET(req: NextRequest) {
     const cheapest = Math.min(...costs);
     const myIndex = offers.findIndex((o) => o.supplier.isMyCompany);
     const mine = offers.filter((o) => o.supplier.isMyCompany);
+    const elec = offers.map((o) => o.tariffElecNormal).filter((v): v is number => v != null && v > 0);
+    const gas = offers.map((o) => o.tariffGas).filter((v): v is number => v != null && v > 0);
+    const r4 = (v: number) => Math.round(v * 10000) / 10000;
     const perType: Record<string, number> = {};
     for (const o of offers) perType[o.contractType] = (perType[o.contractType] ?? 0) + 1;
     const entry = byPlatform.get(run.platform.name) ?? {
@@ -89,8 +96,12 @@ export async function GET(req: NextRequest) {
       maxCashback: Math.round(Math.max(0, ...offers.map((o) => o.discount ?? 0))),
       myRank: myIndex >= 0 ? myIndex + 1 : null, // position within the (filtered) list
       myDelta: mine.length ? Math.round(Math.min(...mine.map((o) => o.annualCost)) - cheapest) : null,
-      avgElec: mean(offers.map((o) => o.tariffElecNormal).filter((v): v is number => v != null), 4),
-      avgGas: mean(offers.map((o) => o.tariffGas).filter((v): v is number => v != null), 4),
+      avgElec: mean(elec, 4),
+      minElec: elec.length ? r4(Math.min(...elec)) : null,
+      maxElec: elec.length ? r4(Math.max(...elec)) : null,
+      avgGas: mean(gas, 4),
+      minGas: gas.length ? r4(Math.min(...gas)) : null,
+      maxGas: gas.length ? r4(Math.max(...gas)) : null,
       avgRating: mean(offers.map((o) => o.rating).filter((v): v is number => v != null), 2),
       vast: perType["vast"] ?? 0,
       variabel: perType["variabel"] ?? 0,

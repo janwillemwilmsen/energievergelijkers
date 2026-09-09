@@ -4,6 +4,16 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 
 export const SETTING_POSTCODE = "defaultPostcode";
+// Preset scans (default address) may run at most once per this many hours;
+// enforced by POST /api/scrapes/run and mirrored in the dashboard UI.
+export const PRESET_COOLDOWN_HOURS = 12;
+
+/** Whether a preset that last completed at `lastRunAt` may run again now. */
+export function presetCooldown(lastRunAt: Date | null, now = new Date()) {
+  if (!lastRunAt) return { blocked: false, nextAllowedAt: null as Date | null };
+  const nextAllowedAt = new Date(lastRunAt.getTime() + PRESET_COOLDOWN_HOURS * 3600_000);
+  return { blocked: nextAllowedAt > now, nextAllowedAt };
+}
 export const SETTING_HUISNR = "defaultHuisnr";
 // Used until an address is saved (also seeded by prisma/seed.mjs).
 export const DEFAULT_ADDRESS = { postcode: "5216EK", huisnr: "27" };

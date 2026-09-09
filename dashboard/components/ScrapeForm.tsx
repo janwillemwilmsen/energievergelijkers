@@ -155,7 +155,8 @@ export default function ScrapeForm({
         </button>
       </div>
       <p className="mt-2 text-[11px] text-slate-400">
-        Dal 0 = enkele meter · teruglevering 0 = geen zonnepanelen · resultaten verschijnen live in de kaarten en het archief.
+        Dal 0 = enkele meter · teruglevering 0 = geen zonnepanelen · de resultaten open je via &quot;Bekijk resultaten&quot; in de
+        statusbalk hieronder (ook terug te vinden in het archief); de kaarten blijven het gekozen preset-scenario tonen.
       </p>
     </form>
   );
