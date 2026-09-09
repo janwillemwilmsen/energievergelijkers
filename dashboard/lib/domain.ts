@@ -9,11 +9,13 @@ export const PLATFORMS = [
   { name: "pricewise", label: "Pricewise.nl", baseUrl: "https://www.pricewise.nl" },
 ] as const;
 
+// Initial presets (seeded once by prisma/seed.mjs). The live set is stored in
+// the Scenario table (isPreset = true) and edited on /admin/presets.
 export const PRESET_SCENARIOS = [
-  { name: "low", electricityNormal: 1500, electricityLow: 0, gas: 800, solarFeedIn: 0 },
-  { name: "medium", electricityNormal: 2900, electricityLow: 0, gas: 1200, solarFeedIn: 0 },
-  { name: "high", electricityNormal: 4500, electricityLow: 0, gas: 2000, solarFeedIn: 0 },
-  { name: "solar", electricityNormal: 3500, electricityLow: 0, gas: 1000, solarFeedIn: 2000 },
+  { name: "low", label: "Laag", electricityNormal: 1500, electricityLow: 0, gas: 800, solarFeedIn: 0 },
+  { name: "medium", label: "Midden", electricityNormal: 2900, electricityLow: 0, gas: 1200, solarFeedIn: 0 },
+  { name: "high", label: "Hoog", electricityNormal: 4500, electricityLow: 0, gas: 2000, solarFeedIn: 0 },
+  { name: "solar", label: "Zon", electricityNormal: 3500, electricityLow: 0, gas: 1000, solarFeedIn: 2000 },
 ] as const;
 
 // Our brand — configurable so the dashboard is reusable.

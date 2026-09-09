@@ -34,7 +34,10 @@ function Spinner() {
 }
 
 function ScreenshotInner() {
-  const sweepId = useSearchParams().get("sweepId") ?? "";
+  const params = useSearchParams();
+  const sweepId = params.get("sweepId") ?? "";
+  // Preset sweeps hold 4 scenarios under one sweepId; scope to one scenario.
+  const scenarioId = params.get("scenarioId");
   const [scan, setScan] = useState<ScanInfo | null>(null);
   const [rows, setRows] = useState<Row[]>(PLATFORMS.map((p) => ({ platform: p, state: "idle" as Status })));
   const [running, setRunning] = useState(false);
@@ -44,7 +47,9 @@ function ScreenshotInner() {
   // Load scan info + any screenshots already taken for this sweep. No rerun.
   useEffect(() => {
     if (!sweepId) return;
-    fetch(`/api/archive/scan?sweepId=${encodeURIComponent(sweepId)}`)
+    fetch(
+      `/api/archive/scan?sweepId=${encodeURIComponent(sweepId)}${scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : ""}`
+    )
       .then((x) => x.json())
       .then((r) => (r.error ? setError(r.error) : setScan(r)));
     fetch(`/api/archive/scan/screenshot?sweepId=${encodeURIComponent(sweepId)}`)
@@ -59,7 +64,7 @@ function ScreenshotInner() {
         setHasAny(Object.values(shots).some(Boolean));
       })
       .catch(() => {});
-  }, [sweepId]);
+  }, [sweepId, scenarioId]);
 
   const setRow = (platform: string, patch: Partial<Row>) =>
     setRows((prev) => prev.map((r) => (r.platform === platform ? { ...r, ...patch } : r)));
@@ -75,7 +80,11 @@ function ScreenshotInner() {
       res = await fetch("/api/archive/scan/screenshot", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(only ? { sweepId, platforms: only } : { sweepId }),
+        body: JSON.stringify({
+          sweepId,
+          ...(scenarioId ? { scenarioId: Number(scenarioId) } : {}),
+          ...(only ? { platforms: only } : {}),
+        }),
       });
     } catch {
       setError("Kon de screenshot-run niet starten.");
@@ -143,7 +152,7 @@ function ScreenshotInner() {
           </p>
         </div>
         <Link
-          href={`/archive/scan?sweepId=${encodeURIComponent(sweepId)}`}
+          href={`/archive/scan?sweepId=${encodeURIComponent(sweepId)}${scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : ""}`}
           className="text-sm font-medium text-emerald-700 hover:underline"
         >
           ← Terug naar scan

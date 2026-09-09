@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { SCENARIO_ORDER } from "@/lib/presets";
 
 /** GET /api/scenarios — presets first, then customs; each with run info. */
 export async function GET() {
   const scenarios = await prisma.scenario.findMany({
-    orderBy: [{ isPreset: "desc" }, { id: "asc" }],
+    orderBy: SCENARIO_ORDER,
     include: { _count: { select: { runs: true } } },
   });
   return NextResponse.json({
     scenarios: scenarios.map((s) => ({
       id: s.id,
       name: s.name,
+      label: s.label,
       electricityNormal: s.electricityNormal,
       electricityLow: s.electricityLow,
       gas: s.gas,

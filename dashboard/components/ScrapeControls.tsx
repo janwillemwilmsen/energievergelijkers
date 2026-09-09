@@ -76,9 +76,9 @@ export default function ScrapeControls({
         </button>
         <button
           disabled={busy}
-          onClick={() => start({ presets: true }, "alle 4 presets")}
+          onClick={() => start({ presets: true }, "alle presets")}
           className="rounded-md bg-slate-800 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-900 disabled:opacity-40"
-          title="Draait de 6 scrapers voor alle 4 preset-scenario's (duurt langer)"
+          title="Draait de 6 scrapers voor alle preset-scenario's (duurt langer)"
         >
           ⟳ Ververs alle presets
         </button>

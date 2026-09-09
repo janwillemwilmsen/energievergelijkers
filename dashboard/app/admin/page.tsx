@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { platformColor } from "@/lib/platformColors";
+import { scenarioLabel } from "@/lib/scenarioLabel";
 
 type AdminRun = {
   id: number;
@@ -17,6 +18,7 @@ type AdminRun = {
   scenario: {
     id: number;
     name: string | null;
+    label: string | null;
     electricityNormal: number;
     electricityLow: number;
     gas: number;
@@ -24,10 +26,6 @@ type AdminRun = {
   };
 };
 
-const scenarioLabel = (s: AdminRun["scenario"]) =>
-  s.name
-    ? { low: "Laag", medium: "Midden", high: "Hoog", solar: "Zon" }[s.name] ?? s.name
-    : `${s.electricityNormal + s.electricityLow} kWh${s.gas > 0 ? ` / ${s.gas} m³` : " / mono"}${s.solarFeedIn ? ` / ☀ ${s.solarFeedIn}` : ""}`;
 
 const STATUS_CHIP: Record<string, string> = {
   completed: "bg-emerald-100 text-emerald-700",
@@ -201,6 +199,9 @@ export default function AdminPage() {
             </p>
           </div>
           <nav className="flex gap-4">
+            <Link href="/admin/presets" className="text-sm font-medium text-emerald-700 hover:underline">
+              Presets &amp; adres
+            </Link>
             <Link href="/archive" className="text-sm font-medium text-emerald-700 hover:underline">
               Archief
             </Link>

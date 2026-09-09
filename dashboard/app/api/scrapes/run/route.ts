@@ -13,7 +13,7 @@ import { prisma } from "@/lib/db";
  *
  * Body: { scenarioId: number, postcode?: string, huisnr?: string }
  *   -> sweep for that scenario, optionally for a specific address
- *   or: { presets: true }        -> re-run all four preset scenarios
+ *   or: { presets: true }        -> re-run every preset scenario (/admin/presets)
  *
  * Returns { sweepId, expectedRuns } for progress polling via /api/scrapes/status.
  */
@@ -26,8 +26,11 @@ export async function POST(req: NextRequest) {
   let expectedRuns: number;
 
   if (body.presets) {
+    const presetCount = await prisma.scenario.count({ where: { isPreset: true } });
+    if (presetCount === 0)
+      return NextResponse.json({ error: "Geen presets geconfigureerd (zie /admin/presets)" }, { status: 400 });
     args = [script, "--scenario", "all", "--sweep-id", sweepId];
-    expectedRuns = 4 * 6;
+    expectedRuns = presetCount * 6;
   } else if (body.scenarioId) {
     const sc = await prisma.scenario.findUnique({ where: { id: Number(body.scenarioId) } });
     if (!sc) return NextResponse.json({ error: "Unknown scenarioId" }, { status: 404 });

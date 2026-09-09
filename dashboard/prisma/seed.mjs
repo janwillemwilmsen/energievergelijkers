@@ -1,7 +1,12 @@
-// Seed: reference data only — platforms, known suppliers, preset scenarios.
-// Plain Node (no tsx/TypeScript) so it can run in the production container.
-// Constants are duplicated from lib/domain.ts on purpose: the runtime image
-// must not depend on the TS toolchain. Keep the two in sync when editing.
+// Seed: reference data only — platforms, known suppliers, preset scenarios,
+// default scrape address. Plain Node (no tsx/TypeScript) so it can run in the
+// production container. Constants are duplicated from lib/domain.ts and
+// lib/presets.ts on purpose: the runtime image must not depend on the TS
+// toolchain. Keep them in sync when editing.
+//
+// Presets and the default address are editable on /admin/presets, and this
+// script runs on EVERY production boot — so it only creates them when none
+// exist yet and never overwrites what the user configured.
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -18,11 +23,14 @@ const PLATFORMS = [
 ];
 
 const PRESET_SCENARIOS = [
-  { name: "low", electricityNormal: 1500, electricityLow: 0, gas: 800, solarFeedIn: 0 },
-  { name: "medium", electricityNormal: 2900, electricityLow: 0, gas: 1200, solarFeedIn: 0 },
-  { name: "high", electricityNormal: 4500, electricityLow: 0, gas: 2000, solarFeedIn: 0 },
-  { name: "solar", electricityNormal: 3500, electricityLow: 0, gas: 1000, solarFeedIn: 2000 },
+  { name: "low", label: "Laag", sortOrder: 0, electricityNormal: 1500, electricityLow: 0, gas: 800, solarFeedIn: 0 },
+  { name: "medium", label: "Midden", sortOrder: 1, electricityNormal: 2900, electricityLow: 0, gas: 1200, solarFeedIn: 0 },
+  { name: "high", label: "Hoog", sortOrder: 2, electricityNormal: 4500, electricityLow: 0, gas: 2000, solarFeedIn: 0 },
+  { name: "solar", label: "Zon", sortOrder: 3, electricityNormal: 3500, electricityLow: 0, gas: 1000, solarFeedIn: 2000 },
 ];
+
+// Default scrape address (Setting rows; keys mirror lib/presets.ts).
+const DEFAULT_SETTINGS = { defaultPostcode: "5216EK", defaultHuisnr: "27" };
 
 const SUPPLIERS = [
   "Essent", "Eneco", "Vattenfall", "Budget Thuis", "Greenchoice", "ENGIE",
@@ -39,20 +47,33 @@ async function main() {
       create: { name, isMyCompany: name === MY_COMPANY },
       update: {},
     });
-  for (const sc of PRESET_SCENARIOS)
-    await prisma.scenario.upsert({
-      where: {
-        electricityNormal_electricityLow_gas_solarFeedIn: {
-          electricityNormal: sc.electricityNormal,
-          electricityLow: sc.electricityLow,
-          gas: sc.gas,
-          solarFeedIn: sc.solarFeedIn,
+  const presetCount = await prisma.scenario.count({ where: { isPreset: true } });
+  if (presetCount === 0) {
+    for (const sc of PRESET_SCENARIOS)
+      await prisma.scenario.upsert({
+        where: {
+          electricityNormal_electricityLow_gas_solarFeedIn: {
+            electricityNormal: sc.electricityNormal,
+            electricityLow: sc.electricityLow,
+            gas: sc.gas,
+            solarFeedIn: sc.solarFeedIn,
+          },
         },
-      },
-      create: { ...sc, isPreset: true },
-      update: { isPreset: true, name: sc.name },
-    });
-  console.log("Seeded platforms, suppliers and preset scenarios (no mock rankings).");
+        create: { ...sc, isPreset: true },
+        update: { isPreset: true, name: sc.name, label: sc.label, sortOrder: sc.sortOrder },
+      });
+  } else {
+    // Databases from before the label/sortOrder columns: fill in the display
+    // name once, only where it is still empty.
+    for (const sc of PRESET_SCENARIOS)
+      await prisma.scenario.updateMany({
+        where: { isPreset: true, name: sc.name, label: null },
+        data: { label: sc.label, sortOrder: sc.sortOrder },
+      });
+  }
+  for (const [key, value] of Object.entries(DEFAULT_SETTINGS))
+    await prisma.setting.upsert({ where: { key }, create: { key, value }, update: {} });
+  console.log("Seeded platforms, suppliers, preset scenarios and default address (no mock rankings).");
 }
 
 main()

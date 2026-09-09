@@ -2,19 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
 /**
- * GET /api/archive/scan?sweepId=...
+ * GET /api/archive/scan?sweepId=...[&scenarioId=...]
  * Full detail of one scan: per platform the run, all offers (rank order),
  * per-platform stats, the provider x platform count matrix, and flattened
- * points for the market charts.
+ * points for the market charts. scenarioId narrows a multi-scenario sweep
+ * (the presets button runs 4 scenarios under ONE sweepId) to one scenario.
  */
 export async function GET(req: NextRequest) {
   const sweepId = req.nextUrl.searchParams.get("sweepId");
+  const scenarioId = Number(req.nextUrl.searchParams.get("scenarioId")) || null;
   if (!sweepId) return NextResponse.json({ error: "sweepId is required" }, { status: 400 });
 
   // Legacy fallback: "run-<id>" keys refer to a single run without sweepId.
   const legacy = sweepId.match(/^run-(\d+)$/);
   const runs = await prisma.scrapeRun.findMany({
-    where: legacy ? { id: Number(legacy[1]) } : { sweepId },
+    where: legacy ? { id: Number(legacy[1]) } : { sweepId, ...(scenarioId ? { scenarioId } : {}) },
     include: {
       platform: { select: { name: true, label: true } },
       scenario: true,
@@ -109,6 +111,7 @@ export async function GET(req: NextRequest) {
     scenario: {
       id: sc.id,
       name: sc.name,
+      label: sc.label,
       electricityNormal: sc.electricityNormal,
       electricityLow: sc.electricityLow,
       gas: sc.gas,

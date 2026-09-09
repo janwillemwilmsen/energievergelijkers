@@ -17,7 +17,7 @@ await run("screenshot-energievergelijk.mjs", "energievergelijk", async (page, in
     origin: "home",
   });
   if (input.teruglevering > 0) q.set("solar", String(input.teruglevering));
-  await page.goto(`${BASE}/energievergelijker#/search/(detail:filters)?${q}`, {
+  await page.goto(`${BASE}/energievergelijker#/search?${q}`, {
     waitUntil: "networkidle",
   });
   await acceptCookies(page);

@@ -35,11 +35,12 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * POST /api/archive/scan/screenshot   body: { sweepId, platforms? }
+ * POST /api/archive/scan/screenshot   body: { sweepId, platforms?, scenarioId? }
  * Runs each screenshot client for the scan's own address + usage, saving to a
  * per-sweep folder (deterministic <platform>.png), and streams newline-delimited
  * JSON progress events. `platforms` limits the run to a subset (e.g. a retry of
- * one failed platform); omitted = all.
+ * one failed platform); omitted = all. `scenarioId` picks the scenario on a
+ * multi-scenario (presets) sweep so the usage params match the scan viewed.
  *   {type:"meta", platforms, postcode, huisnr, normaal, dal, gas, terug}
  *   {type:"start", platform}
  *   {type:"done", platform, mtime}    // mtime = cache-buster for the <img>
@@ -47,14 +48,16 @@ export async function GET(req: NextRequest) {
  *   {type:"complete", ok, total}
  */
 export async function POST(req: NextRequest) {
-  const { sweepId, platforms } = await req.json().catch(() => ({}));
+  const { sweepId, platforms, scenarioId } = await req.json().catch(() => ({}));
   if (!sweepId) return Response.json({ error: "sweepId is required" }, { status: 400 });
   const targets = Array.isArray(platforms) ? platforms.filter(isPlatform) : [...PLATFORMS];
   if (targets.length === 0) return Response.json({ error: "geen geldige platforms" }, { status: 400 });
 
   const legacy = String(sweepId).match(/^run-(\d+)$/);
   const run = await prisma.scrapeRun.findFirst({
-    where: legacy ? { id: Number(legacy[1]) } : { sweepId: String(sweepId) },
+    where: legacy
+      ? { id: Number(legacy[1]) }
+      : { sweepId: String(sweepId), ...(scenarioId ? { scenarioId: Number(scenarioId) } : {}) },
     include: { scenario: true },
     orderBy: { platformId: "asc" },
   });

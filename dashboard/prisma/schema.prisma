@@ -40,7 +40,9 @@ model Supplier {
 // find-or-created by their parameter tuple on ingest.
 model Scenario {
   id                Int     @id @default(autoincrement())
-  name              String? // "low" | "medium" | "high" | "solar" | null for custom
+  name              String? // preset slug ("low", "medium", ...) | null for custom
+  label             String? // preset display name ("Midden"); null for custom
+  sortOrder         Int     @default(0) // preset order in the picker
   electricityNormal Int // kWh/year, normal tariff
   electricityLow    Int // kWh/year, off-peak (0 = single meter / no split)
   gas               Int // m3/year, 0 = electricity-only (mono)
@@ -50,6 +52,12 @@ model Scenario {
   runs ScrapeRun[]
 
   @@unique([electricityNormal, electricityLow, gas, solarFeedIn])
+}
+
+// Key/value app settings edited on /admin/presets (default scrape address, ...).
+model Setting {
+  key   String @id
+  value String
 }
 
 // One scraper execution against ONE platform for ONE scenario.

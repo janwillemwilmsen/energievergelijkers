@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Energievergelijk.nl comparison client — derived from a recorded HAR (2026-08-27).
 // One unauthenticated JSON POST does the whole comparison:
-//   POST https://api.energievergelijk.nl/vergelijker/search
+//   POST https://compare.energievergelijk.nl/api/search
+// (Moved 2026-09-09: api.energievergelijk.nl now CNAMEs to the WordPress host and
+//  the old /vergelijker/search path is gone; the SPA bundle names the new endpoint.)
 // Alleen stroom via gas:0; teruglevering via solar:<kWh/jaar> (key found in the
 // site's own SPA bundle). No cookies, tokens, or session.
 
 import { UA, parseCli, makeRecord, filterRecords, sortRecords, output, num, round } from "./energy-lib.mjs";
 
-const API = "https://api.energievergelijk.nl";
+const API = "https://compare.energievergelijk.nl";
 const HEADERS = {
   "content-type": "application/json",
   accept: "application/json",
@@ -28,12 +30,12 @@ export async function fetchOffers(input) {
     lang: "NL",
   };
   if (input.teruglevering > 0) body.solar = input.teruglevering;
-  const res = await fetch(API + "/vergelijker/search", {
+  const res = await fetch(API + "/api/search", {
     method: "POST",
     headers: HEADERS,
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`POST /vergelijker/search -> ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) throw new Error(`POST /api/search -> ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const list = Object.values(await res.json());
   if (!list.length) throw new Error("No offers returned — check postcode/huisnummer");
 

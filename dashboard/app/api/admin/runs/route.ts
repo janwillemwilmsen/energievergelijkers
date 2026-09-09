@@ -29,6 +29,7 @@ export async function GET() {
       scenario: {
         id: r.scenario.id,
         name: r.scenario.name,
+        label: r.scenario.label,
         electricityNormal: r.scenario.electricityNormal,
         electricityLow: r.scenario.electricityLow,
         gas: r.scenario.gas,

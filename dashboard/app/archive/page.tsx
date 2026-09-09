@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { platformColor } from "@/lib/platformColors";
+import { scenarioLabel } from "@/lib/scenarioLabel";
 
 type Scan = {
   sweepId: string;
   scenario: {
     id: number;
     name: string | null;
+    label: string | null;
     electricityNormal: number;
     electricityLow: number;
     gas: number;
@@ -28,10 +30,6 @@ type Scan = {
   perProvider: Record<string, number>;
 };
 
-const scenarioLabel = (s: Scan["scenario"]) =>
-  s.name
-    ? { low: "Laag", medium: "Midden", high: "Hoog", solar: "Zon" }[s.name] ?? s.name
-    : `${s.electricityNormal + s.electricityLow} kWh${s.gas > 0 ? ` / ${s.gas} m³` : " / mono"}${s.solarFeedIn ? ` / ☀ ${s.solarFeedIn}` : ""}`;
 
 const eur = (v: number | null, d = 0) => (v == null ? "—" : `€${v.toFixed(d)}`);
 
@@ -61,7 +59,7 @@ function ScanCard({ scan }: { scan: Scan }) {
           )}
         </div>
         <Link
-          href={`/archive/scan?sweepId=${encodeURIComponent(scan.sweepId)}`}
+          href={`/archive/scan?sweepId=${encodeURIComponent(scan.sweepId)}&scenarioId=${scan.scenario.id}`}
           className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700"
         >
           Bekijk scan →
@@ -155,7 +153,7 @@ export default function ArchivePage() {
         ) : (
           grouped.map(({ scenario, scans: list }) => (
             <section key={scenario.id} className="space-y-3">
-              <h2 className="flex items-baseline gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+              <h2 className="flex flex-wrap items-baseline gap-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
                 {scenarioLabel(scenario)}
                 <span className="text-xs font-normal normal-case text-slate-400">
                   {scenario.electricityNormal + scenario.electricityLow} kWh
@@ -163,6 +161,22 @@ export default function ArchivePage() {
                   {scenario.solarFeedIn > 0 ? ` · ${scenario.solarFeedIn} kWh teruglevering` : ""}
                   {" · "}
                   {list.length} scan{list.length === 1 ? "" : "s"}
+                </span>
+                <span className="ml-auto flex items-center gap-2">
+                  {list.length > 1 && (
+                    <Link
+                      href={`/archive/diff?scenarioId=${scenario.id}`}
+                      className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold normal-case tracking-normal text-white hover:bg-slate-700"
+                    >
+                      Scan-diff →
+                    </Link>
+                  )}
+                  <Link
+                    href={`/archive/vergelijk?scenarioId=${scenario.id}`}
+                    className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-semibold normal-case tracking-normal text-white hover:bg-emerald-600"
+                  >
+                    Vergelijk over tijd →
+                  </Link>
                 </span>
               </h2>
               <div className="space-y-3">

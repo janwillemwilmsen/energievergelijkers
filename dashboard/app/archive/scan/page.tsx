@@ -8,6 +8,7 @@ import {
   Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from "recharts";
 import { platformColor } from "@/lib/platformColors";
+import OffersTable, { OfferRow } from "@/components/OffersTable";
 
 type Offer = {
   rank: number;
@@ -706,7 +707,10 @@ function TariffSection({ detail }: { detail: ScanDetail }) {
 }
 
 function ScanDetailInner() {
-  const sweepId = useSearchParams().get("sweepId");
+  const params = useSearchParams();
+  const sweepId = params.get("sweepId");
+  // Preset sweeps hold 4 scenarios under one sweepId; scope to one scenario.
+  const scenarioId = params.get("scenarioId");
   const [detail, setDetail] = useState<ScanDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
@@ -715,10 +719,12 @@ function ScanDetailInner() {
 
   useEffect(() => {
     if (!sweepId) return;
-    fetch(`/api/archive/scan?sweepId=${encodeURIComponent(sweepId)}`)
+    fetch(
+      `/api/archive/scan?sweepId=${encodeURIComponent(sweepId)}${scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : ""}`
+    )
       .then((x) => x.json())
       .then((r) => (r.error ? setError(r.error) : setDetail(r)));
-  }, [sweepId]);
+  }, [sweepId, scenarioId]);
 
   if (error) return <div className="py-24 text-center text-rose-500">{error}</div>;
   if (!detail) return <div className="py-24 text-center text-slate-400">Laden…</div>;
@@ -728,6 +734,26 @@ function ScanDetailInner() {
 
   const sc = detail.scenario;
   const total = detail.platforms.reduce((s, p) => s + p.stats.count, 0);
+
+  // Flat rows for the OffersTable; ids are synthetic (the scan API doesn't
+  // expose offer ids) and only serve as React keys.
+  const offerRows: OfferRow[] = detail.platforms.flatMap((p, pi) =>
+    p.offers.map((o, i) => ({
+      id: pi * 10_000 + i,
+      platform: p.platform,
+      platformLabel: p.label,
+      supplier: o.supplier,
+      isMyCompany: o.isMyCompany,
+      contractName: o.contractName,
+      contractType: o.contractType,
+      durationMonths: o.durationMonths,
+      rank: o.rank,
+      annualCost: o.annualCost,
+      monthlyCost: o.monthlyCost,
+      discount: o.discount,
+      rating: o.rating,
+    }))
+  );
 
   return (
     <div className="space-y-5">
@@ -745,7 +771,7 @@ function ScanDetailInner() {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href={`/archive/scan/screenshot?sweepId=${encodeURIComponent(sweepId ?? "")}`}
+            href={`/archive/scan/screenshot?sweepId=${encodeURIComponent(sweepId ?? "")}${scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : ""}`}
             className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700"
           >
             📷 Screenshots
@@ -795,6 +821,10 @@ function ScanDetailInner() {
           Contracten per leverancier per vergelijker
         </h2>
         <ProviderMatrix detail={detail} />
+      </section>
+      <section>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Alle contracten</h2>
+        <OffersTable offers={offerRows} />
       </section>
     </div>
   );

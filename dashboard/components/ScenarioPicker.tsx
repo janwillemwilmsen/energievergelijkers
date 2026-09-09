@@ -1,8 +1,11 @@
 "use client";
 
+import { scenarioLabel, usageLabel } from "@/lib/scenarioLabel";
+
 export type Scenario = {
   id: number;
   name: string | null;
+  label: string | null;
   electricityNormal: number;
   electricityLow: number;
   gas: number;
@@ -11,13 +14,7 @@ export type Scenario = {
   runCount: number;
 };
 
-const PRESET_LABELS: Record<string, string> = {
-  low: "Laag · 1.500 kWh / 800 m³",
-  medium: "Midden · 2.900 kWh / 1.200 m³",
-  high: "Hoog · 4.500 kWh / 2.000 m³",
-  solar: "Zon · 3.500 kWh + 2.000 terug / 1.000 m³",
-};
-
+// Presets (label + usage) are configured on /admin/presets.
 // Scenario chips only — creating a new custom scenario (incl. address + scrape)
 // happens in the ScrapeForm below the picker.
 export default function ScenarioPicker({
@@ -45,15 +42,13 @@ export default function ScenarioPicker({
         <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Scenario</span>
         {presets.map((s) => (
           <button key={s.id} className={btn(s.id === activeId)} onClick={() => onSelect(s.id)}>
-            {PRESET_LABELS[s.name ?? ""] ?? s.name}
+            {scenarioLabel(s)} · {usageLabel(s)}
             {s.runCount === 0 && <span className="ml-1 text-xs opacity-60">(geen data)</span>}
           </button>
         ))}
         {customs.map((s) => (
           <button key={s.id} className={btn(s.id === activeId)} onClick={() => onSelect(s.id)}>
-            {s.electricityNormal + s.electricityLow} kWh
-            {s.gas > 0 ? ` / ${s.gas} m³` : " / mono"}
-            {s.solarFeedIn > 0 ? ` / ☀ ${s.solarFeedIn}` : ""}
+            {usageLabel(s, true)}
           </button>
         ))}
       </div>
