@@ -21,25 +21,89 @@ await run("screenshot-energiekiezer.mjs", "energiekiezer", async (page, input) =
     await page.waitForTimeout(1200);
   }
 
+  // The widget is a React (Chakra) *controlled* form. Keystrokes that land
+  // before React has hydrated the inputs end up in the DOM but never in React
+  // state, so the submit fails validation ("Vul alsjeblieft je postcode in")
+  // even though the field visibly shows the postcode. That is what a failed
+  // run looks like — not a captcha. So: wait for hydration, then verify the
+  // value React holds (its props.value on the element) and retype on mismatch.
+  await page
+    .waitForFunction(
+      () => {
+        const el = document.querySelector("#postalcode");
+        return !!el && Object.keys(el).some((k) => k.startsWith("__reactProps$"));
+      },
+      null,
+      { timeout: 20_000 }
+    )
+    .catch(() => {});
+  await page.waitForTimeout(500);
+
+  const reactValue = (sel) =>
+    page
+      .locator(sel)
+      .evaluate((el) => {
+        const k = Object.keys(el).find((k) => k.startsWith("__reactProps$"));
+        return k ? String(el[k]?.value ?? "") : "";
+      })
+      .catch(() => "");
+  const typeField = async (sel, text) => {
+    const loc = page.locator(sel);
+    await loc.click();
+    await loc.fill(""); // dispatches an input event, so React's state resets too
+    await loc.pressSequentially(text, { delay: 90 });
+    await page.keyboard.press("Tab");
+  };
   const pcSpaced = input.postcode.slice(0, 4) + " " + input.postcode.slice(4);
-  await page.locator("#postalcode").click();
-  await page.locator("#postalcode").pressSequentially(pcSpaced, { delay: 90 });
-  await page.keyboard.press("Tab");
-  await page.locator("#housenumber").click();
-  await page.locator("#housenumber").pressSequentially(String(input.huisnr), { delay: 90 });
-  await page.keyboard.press("Tab");
-  await page.waitForResponse((r) => /\/address/i.test(r.url()), { timeout: 20_000 }).catch(() => {});
-  await page.waitForTimeout(6000);
+  const huisnr = String(input.huisnr);
+  const fillAddress = async () => {
+    for (let i = 0; i < 3; i++) {
+      const lookup = page.waitForResponse((r) => /\/address/i.test(r.url()), { timeout: 20_000 }).catch(() => null);
+      await typeField("#postalcode", pcSpaced);
+      await typeField("#housenumber", huisnr);
+      await lookup;
+      await page.waitForTimeout(1500);
+      const pcOk = (await reactValue("#postalcode")).replace(/\s/g, "").toUpperCase() === input.postcode.toUpperCase();
+      const nrOk = (await reactValue("#housenumber")).trim() === huisnr;
+      if (pcOk && nrOk) return;
+      await page.waitForTimeout(1500);
+    }
+  };
+  await fillAddress();
+  await page.waitForTimeout(4500);
+
   // The submit no-ops when the address lookup isn't settled yet; re-click with
   // spacing (rapid re-clicks also no-op) instead of failing on one 30s wait.
+  // If the form reports a validation error, the state was lost — retype first.
   const submit = page.getByRole("button", { name: "Vergelijk en bespaar" }).first();
+  const validation = page.getByText(/Vul alsjeblieft|ongeldig/i).first();
   let advanced = false;
   for (let attempt = 0; attempt < 3 && !advanced; attempt++) {
     if (attempt > 0) await page.waitForTimeout(4000);
+    if (await validation.isVisible().catch(() => false)) await fillAddress();
     await submit.click().catch(() => {});
     advanced = await page.waitForURL(/mijn-wensen/i, { timeout: 15_000 }).then(() => true, () => false);
   }
-  if (!advanced) throw new Error(`homepage-submit bleef hangen op ${page.url()} — geen /mijn-wensen (captcha/botdetectie?)`);
+  if (!advanced) {
+    const diag = await page
+      .evaluate(() => {
+        const txt = document.body.innerText;
+        const captcha =
+          /captcha|hcaptcha|recaptcha|cloudflare|verify you are human|bevestig dat je een mens/i.test(txt) ||
+          !!document.querySelector('iframe[src*="captcha"], iframe[src*="challenges.cloudflare"]');
+        const err = [...document.querySelectorAll("*")]
+          .filter((n) => n.children.length === 0 && /Vul alsjeblieft|ongeldig/i.test(n.textContent || ""))
+          .map((n) => n.textContent.trim())[0];
+        return { captcha, err };
+      })
+      .catch(() => ({ captcha: false, err: null }));
+    const why = diag.captcha
+      ? "captcha/botdetectie op de pagina"
+      : diag.err
+        ? `formulier weigert: "${diag.err}" (React-state kreeg de invoer niet)`
+        : "geen validatiefout en geen captcha zichtbaar";
+    throw new Error(`homepage-submit bleef hangen op ${page.url()} — geen /mijn-wensen: ${why}`);
+  }
   await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
   await page.waitForTimeout(2000);
 

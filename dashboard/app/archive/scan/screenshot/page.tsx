@@ -22,7 +22,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 };
 
 type Status = "idle" | "running" | "done" | "error";
-type Row = { platform: string; state: Status; mtime?: number; error?: string };
+type Row = { platform: string; state: Status; mtime?: number; error?: string; errorAt?: number };
 
 const imgUrl = (sweepId: string, platform: string, v?: number) =>
   `/api/archive/scan/screenshot/image?sweepId=${encodeURIComponent(sweepId)}&platform=${platform}${v ? `&v=${v}` : ""}`;
@@ -125,7 +125,7 @@ function ScreenshotInner() {
           setRow(ev.platform as string, { state: "done", mtime: ev.mtime as number });
           setHasAny(true);
         } else if (ev.type === "error") {
-          setRow(ev.platform as string, { state: "error", error: ev.error as string | undefined });
+          setRow(ev.platform as string, { state: "error", error: ev.error as string | undefined, errorAt: Date.now() });
         }
       }
     }
@@ -206,6 +206,18 @@ function ScreenshotInner() {
                   {row.state === "idle" && <span className="text-slate-400">nog niet gemaakt</span>}
                   {row.state === "done" && <span className="text-emerald-600">✓ klaar</span>}
                   {row.state === "error" && <span className="text-rose-600">✗ mislukt</span>}
+                  {/* Per-platform trigger: first shot when idle, re-shot when done
+                      (the error state has its own retry button in the body). */}
+                  {(row.state === "idle" || row.state === "done") && (
+                    <button
+                      onClick={() => start([row.platform])}
+                      disabled={running || !scan.address}
+                      title={row.state === "done" ? "Maak deze screenshot opnieuw" : "Maak alleen deze screenshot"}
+                      className="ml-1 rounded-md bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {row.state === "done" ? "↻ Opnieuw" : "📷 Maak screenshot"}
+                    </button>
+                  )}
                 </span>
               </div>
               <div className="p-3">
@@ -233,6 +245,25 @@ function ScreenshotInner() {
                     >
                       ↻ Opnieuw proberen
                     </button>
+                    {/* The client writes a debug shot of the page where it got
+                        stuck; show it so the cause (captcha, validation error,
+                        cookie wall) is visible without shell access to /data. */}
+                    <a
+                      href={`${imgUrl(sweepId, row.platform, row.errorAt)}&debug=1`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Open de debug-screenshot van het moment van falen"
+                      className="w-full"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`${imgUrl(sweepId, row.platform, row.errorAt)}&debug=1`}
+                        alt={`Debug-screenshot ${row.platform}`}
+                        onError={(e) => ((e.currentTarget.parentElement as HTMLElement).hidden = true)}
+                        className="max-h-96 w-full rounded-md object-cover object-top ring-1 ring-rose-200 transition hover:opacity-90"
+                      />
+                      <span className="mt-1 block text-[11px] text-slate-400">Pagina op het moment van falen</span>
+                    </a>
                   </div>
                 ) : (
                   <div className="flex h-32 items-center justify-center text-xs text-slate-400">

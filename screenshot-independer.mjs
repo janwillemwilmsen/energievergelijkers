@@ -74,9 +74,35 @@ await run("screenshot-independer.mjs", "independer", async (page, input) => {
   }
   if (input.gas > 0) await page.locator("#gasVerbruik").fill(String(input.gas)).catch(() => {});
 
-  if (input.teruglevering > 0) {
+  // "Ik heb zonnepanelen" is a toggle, and Independer remembers the previous
+  // answers in the browser session (the dashboard runs scenarios back-to-back
+  // on one browserless instance). A blind click would therefore *untick* it in
+  // the solar scenario and leave it ticked, with its required teruglevering
+  // fields empty, in the plain dual-fuel one. Sync the toggle to the input
+  // instead: the revealed fields are the reliable signal for its state.
+  //   dubbele meter: #stroomOpwekkingNormaal + #stroomOpwekkingDal
+  //   enkele meter:  #stroomOpwekking
+  //   both:          #solarPanelsAmount (optioneel)
+  const opwekNormaal = page.locator("#stroomOpwekkingNormaal, #stroomOpwekking").first();
+  const opwekDal = page.locator("#stroomOpwekkingDal");
+  const solarOn = async () => (await opwekNormaal.count()) > 0 && (await opwekNormaal.isVisible().catch(() => false));
+  const wantSolar = input.teruglevering > 0;
+  if ((await solarOn()) !== wantSolar) {
     await page.getByText("Ik heb zonnepanelen", { exact: false }).click().catch(() => {});
     await page.waitForTimeout(500);
+  }
+  if (wantSolar) {
+    await page.locator("#solarPanelsAmount").fill(String(input.panelen)).catch(() => {});
+    if (input.dal === 0) {
+      await opwekNormaal.fill(String(input.teruglevering)).catch(() => {});
+    } else {
+      await opwekNormaal.fill(String(input.terugNormaal)).catch(() => {});
+      await opwekDal.fill(String(input.terugDal)).catch(() => {});
+    }
+  } else if (await solarOn()) {
+    // Could not untick it — zero the required fields so validation passes.
+    await opwekNormaal.fill("0").catch(() => {});
+    if (await opwekDal.count()) await opwekDal.fill("0").catch(() => {});
   }
 
   // Two required choices gate the "Vergelijken" button.
