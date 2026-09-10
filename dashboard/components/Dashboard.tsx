@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ScenarioPicker, { Scenario } from "./ScenarioPicker";
 import KpiCards, { OverviewCard } from "./KpiCards";
+import PresetMatrix, { PresetMatrixData } from "./PresetMatrix";
 import ScrapeControls from "./ScrapeControls";
 import ScrapeForm from "./ScrapeForm";
 import { useSweep } from "./useSweep";
@@ -13,6 +14,7 @@ export default function Dashboard() {
   const [cooldownHours, setCooldownHours] = useState(12);
   const [scenarioId, setScenarioId] = useState<number | null>(null);
   const [overview, setOverview] = useState<{ myCompany: string | null; cards: OverviewCard[] } | null>(null);
+  const [matrix, setMatrix] = useState<PresetMatrixData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadScenarios = useCallback(async () => {
@@ -49,9 +51,22 @@ export default function Dashboard() {
     loadData();
   }, [loadData]);
 
+  // Preset × contract-type matrix (independent of the selected scenario).
+  const loadMatrix = useCallback(
+    () =>
+      fetch("/api/overview/presets")
+        .then((x) => x.json())
+        .then((m) => setMatrix(m)),
+    []
+  );
+  useEffect(() => {
+    loadMatrix();
+  }, [loadMatrix]);
+
   const sweep = useSweep(() => {
     loadScenarios();
     loadData(true);
+    loadMatrix();
   });
 
   // A custom scrape ("Eigen scrape") does not switch the dashboard to that
@@ -109,6 +124,8 @@ export default function Dashboard() {
       ) : (
         <KpiCards cards={overview?.cards ?? []} />
       )}
+
+      {matrix && <PresetMatrix data={matrix} />}
     </div>
   );
 }
