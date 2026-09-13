@@ -44,8 +44,13 @@ export function safeSweep(sweepId: string): string {
 
 // One folder per sweep, one deterministic <platform>.png inside it, so a rerun
 // overwrites in place and the files can be listed/served without a database.
-export function sweepDir(sweepId: string): string {
-  return path.join(shotsBase(), safeSweep(sweepId));
+// Preset sweeps hold several scenarios under ONE sweepId, so those get a
+// scenario sub-folder (<sweep>/s<scenarioId>/); without it every scenario
+// page of the sweep showed the same shots. No scenarioId = the plain sweep
+// folder (single-scenario sweeps, legacy "run-<id>" keys, older shots).
+export function sweepDir(sweepId: string, scenarioId?: number | null): string {
+  const base = path.join(shotsBase(), safeSweep(sweepId));
+  return scenarioId ? path.join(base, `s${scenarioId}`) : base;
 }
 
 export const isPlatform = (v: string): v is Platform => (PLATFORMS as readonly string[]).includes(v);

@@ -13,14 +13,16 @@ export const dynamic = "force-dynamic";
 const PER_PLATFORM_TIMEOUT = 180_000;
 
 /**
- * GET /api/archive/scan/screenshot?sweepId=...
+ * GET /api/archive/scan/screenshot?sweepId=...[&scenarioId=...]
  * Lists the screenshots already on disk for this sweep (so the page can show
  * them on load without re-running). Returns { shots: { <platform>: mtimeMs|null } }.
+ * scenarioId scopes a multi-scenario (presets) sweep to one scenario's folder.
  */
 export async function GET(req: NextRequest) {
   const sweepId = req.nextUrl.searchParams.get("sweepId");
+  const scenarioId = Number(req.nextUrl.searchParams.get("scenarioId")) || null;
   if (!sweepId) return Response.json({ error: "sweepId is required" }, { status: 400 });
-  const dir = sweepDir(sweepId);
+  const dir = sweepDir(sweepId, scenarioId);
   const shots: Record<string, number | null> = {};
   await Promise.all(
     PLATFORMS.map(async (p) => {
@@ -31,7 +33,7 @@ export async function GET(req: NextRequest) {
       }
     })
   );
-  return Response.json({ sweepId, shots });
+  return Response.json({ sweepId, scenarioId, shots });
 }
 
 /**
@@ -40,7 +42,8 @@ export async function GET(req: NextRequest) {
  * per-sweep folder (deterministic <platform>.png), and streams newline-delimited
  * JSON progress events. `platforms` limits the run to a subset (e.g. a retry of
  * one failed platform); omitted = all. `scenarioId` picks the scenario on a
- * multi-scenario (presets) sweep so the usage params match the scan viewed.
+ * multi-scenario (presets) sweep so the usage params match the scan viewed,
+ * and the shots are stored in that scenario's own sub-folder.
  *   {type:"meta", platforms, postcode, huisnr, normaal, dal, gas, terug}
  *   {type:"start", platform}
  *   {type:"done", platform, mtime}    // mtime = cache-buster for the <img>
@@ -79,7 +82,7 @@ export async function POST(req: NextRequest) {
     terug: sc.solarFeedIn,
   };
   const root = repoRoot();
-  const outDir = sweepDir(String(sweepId));
+  const outDir = sweepDir(String(sweepId), Number(scenarioId) || null);
   await mkdir(outDir, { recursive: true });
 
   const encoder = new TextEncoder();

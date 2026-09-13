@@ -279,18 +279,145 @@ function RankingFilters({
   );
 }
 
+// Per-sweep (per-scenario) screenshots: platform -> mtime, null = none yet.
+type Shots = Record<string, number | null>;
+
+const shotImgUrl = (sweepId: string, scenarioId: string | null, platform: string, v?: number | null) =>
+  `/api/archive/scan/screenshot/image?sweepId=${encodeURIComponent(sweepId)}&platform=${platform}` +
+  `${scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : ""}${v ? `&v=${v}` : ""}`;
+
+// Opens the screenshot in a small popup window (not a full tab) so it can sit
+// next to the ranking column for a quick visual check.
+function openShotPopup(url: string, platform: string) {
+  const w = Math.min(1000, Math.floor(window.screen.availWidth * 0.6));
+  const h = Math.floor(window.screen.availHeight * 0.9);
+  const left = window.screen.availWidth - w - 20;
+  window.open(url, `shot-${platform}`, `popup=yes,width=${w},height=${h},left=${left},top=20,scrollbars=yes,resizable=yes`);
+}
+
+// Footer under each ranking column: a link to the existing screenshot, or a
+// button that takes one for just this platform (same endpoint the screenshot
+// page uses, limited to one platform) and then turns into the link.
+function ColumnShotFooter({
+  sweepId,
+  scenarioId,
+  platform,
+  mtime,
+  disabled,
+  onDone,
+}: {
+  sweepId: string;
+  scenarioId: string | null;
+  platform: string;
+  mtime: number | null | undefined;
+  disabled: boolean;
+  onDone: (mtime: number) => void;
+}) {
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function take() {
+    if (running) return;
+    setRunning(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/archive/scan/screenshot", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sweepId, platforms: [platform], ...(scenarioId ? { scenarioId: Number(scenarioId) } : {}) }),
+      });
+      if (!res.ok || !res.body) {
+        setError((await res.json().then((b) => b.error).catch(() => null)) ?? "Screenshot mislukt.");
+        return;
+      }
+      // NDJSON event stream; only done/error for this platform matter here.
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let finished = false;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let ev: { type?: string; platform?: string; mtime?: number; error?: string };
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (ev.platform !== platform) continue;
+          if (ev.type === "done" && ev.mtime) {
+            finished = true;
+            onDone(ev.mtime);
+          } else if (ev.type === "error") {
+            finished = true;
+            setError(ev.error ?? "Screenshot mislukt.");
+          }
+        }
+      }
+      if (!finished) setError("Geen resultaat ontvangen.");
+    } catch {
+      setError("Kon de screenshot niet starten.");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const btn = "rounded-md px-2 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-50";
+  return (
+    <div className="border-t border-slate-100 px-3 py-2">
+      {mtime ? (
+        <button
+          onClick={() => openShotPopup(shotImgUrl(sweepId, scenarioId, platform, mtime), platform)}
+          title={`Screenshot van ${new Date(mtime).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" })} in een popup openen`}
+          className={`${btn} w-full bg-slate-100 text-slate-700 hover:bg-slate-200`}
+        >
+          📷 Bekijk screenshot
+        </button>
+      ) : (
+        <button
+          onClick={take}
+          disabled={running || disabled}
+          title={disabled ? "Deze scan heeft geen postcode/huisnummer" : "Maak alleen voor deze vergelijker een screenshot"}
+          className={`${btn} flex w-full items-center justify-center gap-1.5 bg-slate-900 text-white hover:bg-slate-700`}
+        >
+          {running && (
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-400 border-t-white" />
+          )}
+          {running ? "Screenshot wordt gemaakt…" : "📷 Maak screenshot"}
+        </button>
+      )}
+      {error && <p className="mt-1 text-[10px] text-rose-600">{error}</p>}
+    </div>
+  );
+}
+
 function PlatformColumns({
   platforms,
   typeFilter,
   providerFilter,
   highlighted,
   brandColor,
+  sweepId,
+  scenarioId,
+  shots,
+  canShoot,
+  onShot,
 }: {
   platforms: PlatformBlock[];
   typeFilter: Set<string>;
   providerFilter: Set<string>;
   highlighted: Set<string>;
   brandColor: Map<string, string>;
+  sweepId: string;
+  scenarioId: string | null;
+  shots: Shots;
+  canShoot: boolean;
+  onShot: (platform: string, mtime: number) => void;
 }) {
   const match = (o: Offer) =>
     (typeFilter.size === 0 || typeFilter.has(o.contractType)) &&
@@ -345,6 +472,14 @@ function PlatformColumns({
                   );
                 })}
               </ol>
+              <ColumnShotFooter
+                sweepId={sweepId}
+                scenarioId={scenarioId}
+                platform={p.platform}
+                mtime={shots[p.platform]}
+                disabled={!canShoot}
+                onDone={(m) => onShot(p.platform, m)}
+              />
             </div>
           );
         })}
@@ -716,14 +851,19 @@ function ScanDetailInner() {
   const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
   const [providerFilter, setProviderFilter] = useState<Set<string>>(new Set());
   const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
+  const [shots, setShots] = useState<Shots>({});
 
   useEffect(() => {
     if (!sweepId) return;
-    fetch(
-      `/api/archive/scan?sweepId=${encodeURIComponent(sweepId)}${scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : ""}`
-    )
+    const scope = scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : "";
+    fetch(`/api/archive/scan?sweepId=${encodeURIComponent(sweepId)}${scope}`)
       .then((x) => x.json())
       .then((r) => (r.error ? setError(r.error) : setDetail(r)));
+    // Which platforms already have a screenshot for this scan (per scenario).
+    fetch(`/api/archive/scan/screenshot?sweepId=${encodeURIComponent(sweepId)}${scope}`)
+      .then((x) => x.json())
+      .then((r) => setShots(r.shots ?? {}))
+      .catch(() => {});
   }, [sweepId, scenarioId]);
 
   if (error) return <div className="py-24 text-center text-rose-500">{error}</div>;
@@ -812,6 +952,11 @@ function ScanDetailInner() {
           providerFilter={providerFilter}
           highlighted={highlighted}
           brandColor={brandColor}
+          sweepId={sweepId ?? ""}
+          scenarioId={scenarioId}
+          shots={shots}
+          canShoot={!!detail.address}
+          onShot={(platform, mtime) => setShots((prev) => ({ ...prev, [platform]: mtime }))}
         />
       </section>
       <Charts detail={detail} />

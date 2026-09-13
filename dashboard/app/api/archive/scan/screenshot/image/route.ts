@@ -7,8 +7,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/archive/scan/screenshot/image?sweepId=...&platform=gaslicht[&debug=1]
- * Streams the sweep's <platform>.png. With `debug=1` it serves the newest
+ * GET /api/archive/scan/screenshot/image?sweepId=...&platform=gaslicht[&scenarioId=...][&debug=1]
+ * Streams the sweep's <platform>.png (from the scenario sub-folder when
+ * scenarioId is given — preset sweeps share one sweepId across scenarios). With `debug=1` it serves the newest
  * <platform>-FAILED-<stamp>.png instead — the debug shot saveShot() writes when
  * a client throws — so a failure can be inspected from the dashboard (on
  * production the shots live on the /data volume, out of easy reach).
@@ -18,10 +19,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const sweepId = req.nextUrl.searchParams.get("sweepId");
   const platform = req.nextUrl.searchParams.get("platform") ?? "";
+  const scenarioId = Number(req.nextUrl.searchParams.get("scenarioId")) || null;
   const debug = req.nextUrl.searchParams.get("debug") === "1";
   if (!sweepId || !isPlatform(platform)) return new Response("bad request", { status: 400 });
   try {
-    const dir = sweepDir(sweepId);
+    const dir = sweepDir(sweepId, scenarioId);
     let file = `${platform}.png`;
     if (debug) {
       // Timestamps are ISO-ish (lexically sortable), so the last one is newest.

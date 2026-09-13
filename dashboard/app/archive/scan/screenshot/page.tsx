@@ -24,8 +24,11 @@ const PLATFORM_LABELS: Record<string, string> = {
 type Status = "idle" | "running" | "done" | "error";
 type Row = { platform: string; state: Status; mtime?: number; error?: string; errorAt?: number };
 
-const imgUrl = (sweepId: string, platform: string, v?: number) =>
-  `/api/archive/scan/screenshot/image?sweepId=${encodeURIComponent(sweepId)}&platform=${platform}${v ? `&v=${v}` : ""}`;
+// scenarioId scopes preset sweeps (4 scenarios under one sweepId) to the
+// scenario's own screenshot folder; without it all scenarios shared one set.
+const imgUrl = (sweepId: string, platform: string, scenarioId: string | null, v?: number) =>
+  `/api/archive/scan/screenshot/image?sweepId=${encodeURIComponent(sweepId)}&platform=${platform}` +
+  `${scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : ""}${v ? `&v=${v}` : ""}`;
 
 function Spinner() {
   return (
@@ -52,7 +55,9 @@ function ScreenshotInner() {
     )
       .then((x) => x.json())
       .then((r) => (r.error ? setError(r.error) : setScan(r)));
-    fetch(`/api/archive/scan/screenshot?sweepId=${encodeURIComponent(sweepId)}`)
+    fetch(
+      `/api/archive/scan/screenshot?sweepId=${encodeURIComponent(sweepId)}${scenarioId ? `&scenarioId=${encodeURIComponent(scenarioId)}` : ""}`
+    )
       .then((x) => x.json())
       .then((r) => {
         const shots: Record<string, number | null> = r.shots ?? {};
@@ -223,14 +228,14 @@ function ScreenshotInner() {
               <div className="p-3">
                 {row.state === "done" ? (
                   <a
-                    href={imgUrl(sweepId, row.platform, row.mtime)}
+                    href={imgUrl(sweepId, row.platform, scenarioId, row.mtime)}
                     target="_blank"
                     rel="noreferrer"
                     title="Open volledige screenshot"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={imgUrl(sweepId, row.platform, row.mtime)}
+                      src={imgUrl(sweepId, row.platform, scenarioId, row.mtime)}
                       alt={`Screenshot ${row.platform}`}
                       className="max-h-96 w-full rounded-md object-cover object-top ring-1 ring-slate-200 transition hover:opacity-90"
                     />
@@ -249,7 +254,7 @@ function ScreenshotInner() {
                         stuck; show it so the cause (captcha, validation error,
                         cookie wall) is visible without shell access to /data. */}
                     <a
-                      href={`${imgUrl(sweepId, row.platform, row.errorAt)}&debug=1`}
+                      href={`${imgUrl(sweepId, row.platform, scenarioId, row.errorAt)}&debug=1`}
                       target="_blank"
                       rel="noreferrer"
                       title="Open de debug-screenshot van het moment van falen"
@@ -257,7 +262,7 @@ function ScreenshotInner() {
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`${imgUrl(sweepId, row.platform, row.errorAt)}&debug=1`}
+                        src={`${imgUrl(sweepId, row.platform, scenarioId, row.errorAt)}&debug=1`}
                         alt={`Debug-screenshot ${row.platform}`}
                         onError={(e) => ((e.currentTarget.parentElement as HTMLElement).hidden = true)}
                         className="max-h-96 w-full rounded-md object-cover object-top ring-1 ring-rose-200 transition hover:opacity-90"

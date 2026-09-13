@@ -77,6 +77,9 @@ clients for the scan's **own** postcode + usage (so the shots are directly
 comparable to the scrape), streaming live per-platform status (spinner →
 ✓/✗) via `POST /api/archive/scan/screenshot`, and shows each finished
 screenshot inline (served by `/api/archive/scan/screenshot/image`).
+Shots are stored per sweep as `<SHOTS_DIR>/<sweepId>/<platform>.png`; a
+presets sweep (four scenarios under one sweepId) gets a sub-folder per
+scenario, `<sweepId>/s<scenarioId>/`, so each scenario keeps its own set.
 
 ## From the CLI / in production
 
@@ -118,9 +121,13 @@ pass `--normaal/--dal/--gas/--teruglevering`; `--only <platform>` runs one.
   desktop viewport and a Windows Chrome UA through the CDP session instead.
 - **Timing quirks** (encoded in the scripts, noted here so they are not
   "simplified" away):
-  - *EnergieKiezer* — enter postcode/huisnummer as real keystrokes, Tab out of
-    each field, wait for the address lookup, pause, then click **once**. Rapid
-    re-clicks make the submit no-op.
+  - *EnergieKiezer* — does **not** use the homepage widget. The site keeps its
+    wizard state in `sessionStorage["ekUser"]` and rebuilds the results page
+    from it, so the client resolves the address via the public API, seeds
+    that key and opens `/mijn-wensen/resultaten` directly (~13s end to end).
+    The widget flow (keystrokes, Tab out, wait for the lookup, click once;
+    rapid re-clicks no-op and the suggestion dropdown blocks clicks) is kept
+    only as a fallback for when the seeded page fails to render.
   - *Pricewise* — the compare button is two-phase: the first click validates the
     address, a second click fires the redirect to `/energie/resultaat-v5/`.
   - *Independer* — the intro submit only arms once `/api/address/getaddressdata`
