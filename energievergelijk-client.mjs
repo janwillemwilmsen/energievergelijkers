@@ -5,7 +5,9 @@
 // (Moved 2026-09-09: api.energievergelijk.nl now CNAMEs to the WordPress host and
 //  the old /vergelijker/search path is gone; the SPA bundle names the new endpoint.)
 // Alleen stroom via gas:0; teruglevering via solar:<kWh/jaar> (key found in the
-// site's own SPA bundle). No cookies, tokens, or session.
+// site's own SPA bundle). filters ["2:5"] = "Alle contracten" (the SPA's
+// Type-contract radio; 2:17 = Beste deals, 2:4 = Variabel). No cookies,
+// tokens, or session.
 
 import { UA, parseCli, makeRecord, filterRecords, sortRecords, output, num, round } from "./energy-lib.mjs";
 
@@ -26,6 +28,11 @@ export async function fetchOffers(input) {
     zipcode: input.postcode,
     housenumber: String(input.huisnr),
     price_rate: "m",
+    // Contract-type filter as the SPA sends it: "2:5" = "Alle contracten".
+    // Without it the API answers with the site's "Beste deals" subset (34 of
+    // 56 offers for a mid-size household, observed 2026-09-14), which hides
+    // most dynamic and variable contracts.
+    filters: ["2:5"],
     origin: "home",
     lang: "NL",
   };

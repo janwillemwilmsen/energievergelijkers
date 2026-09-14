@@ -92,7 +92,9 @@ function buildState(input, address) {
       electricityType: [],
       gasType: [],
       providers: [],
-      sortBy: "priceQuality",
+      // "price" = the "Goedkoopste" tab (lowest price first); the site's own
+      // default is "priceQuality" (Prijs-kwaliteit).
+      sortBy: "price",
       onlyAvailableForSignup: false,
     },
   };
@@ -120,7 +122,21 @@ async function seededResults(page, input) {
     const summaryOk = await page
       .evaluate((n) => new RegExp(`\\b${n}\\s*kWh`).test(document.body.innerText), input.normaal)
       .catch(() => false);
-    if (summaryOk) return true;
+    if (summaryOk) {
+      // The "Alle N energiedeals" list should be sorted on price (ascending
+      // "per maand" amounts); warn if the seeded sortBy was not honoured.
+      const prices = await page
+        .evaluate(() => {
+          const txt = document.body.innerText;
+          const from = txt.search(/Alle \d+ energiedeals/);
+          const list = from >= 0 ? txt.slice(from) : txt;
+          return [...list.matchAll(/per maand\s*(\d{2,4})\s*,(\d{2})/g)].map((m) => Number(`${m[1]}.${m[2]}`));
+        })
+        .catch(() => []);
+      if (prices.length && !prices.every((v, i) => i === 0 || v >= prices[i - 1]))
+        console.error("energiekiezer: sortering op Goedkoopste lijkt niet toegepast (prijzen niet oplopend)");
+      return true;
+    }
     console.error("energiekiezer: resultaten tonen niet het opgegeven verbruik — terugvallen op de homepage-flow");
   }
   return false;

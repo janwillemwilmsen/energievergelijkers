@@ -21,6 +21,14 @@ export const PRESET_SCENARIOS = [
 // Our brand — configurable so the dashboard is reusable.
 export const MY_COMPANY = process.env.MY_COMPANY_NAME ?? "Essent";
 
+// Sister brands of our company (canonical supplier names, see aliases below).
+// The homepage matrix can be switched to rank one of these instead.
+// Comma-separated via SIBLING_BRANDS, e.g. "Energiedirect,Vandebron".
+export const SIBLING_BRANDS = (process.env.SIBLING_BRANDS ?? "Energiedirect")
+  .split(",")
+  .map((b) => b.trim())
+  .filter(Boolean);
+
 // Suppliers appear under slightly different names per platform
 // ("OXXIO Nederland B.V.", "Oxxio", "OXXIO"). Normalize to one canonical name.
 const SUPPLIER_ALIASES: Record<string, string> = {

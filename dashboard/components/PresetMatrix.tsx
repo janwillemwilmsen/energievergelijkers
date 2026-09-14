@@ -7,7 +7,9 @@ import type { OverviewCard } from "./KpiCards";
 
 export type PresetMatrixData = {
   myCompany: string | null;
-  types: readonly string[];
+  brand: string | null; // supplier the ranks refer to (own company or a sister brand)
+  brands: string[];
+  types: { key: string; label: string }[];
   presets: (ScenarioLike & {
     id: number;
     lastRunAt: string | null;
@@ -15,7 +17,6 @@ export type PresetMatrixData = {
   })[];
 };
 
-const TYPE_LABEL: Record<string, string> = { vast: "Vast", variabel: "Variabel", dynamisch: "Dynamisch" };
 const eur = (v: number) => `€${v.toFixed(0)}`;
 
 function Delta({ delta }: { delta: number | null | undefined }) {
@@ -59,13 +60,25 @@ function Cell({ c }: { c: OverviewCard }) {
   );
 }
 
-// Homepage matrix: per preset a block with one row per contract type and one
-// column per platform. Ranks are within the row's contract type (so #3 in the
-// "vast" row = 3rd cheapest fixed contract), unlike the cards above which
-// rank across all types for the selected scenario.
-export default function PresetMatrix({ data }: { data: PresetMatrixData }) {
-  const platforms = data.presets[0]?.cards[data.types[0]]?.map((c) => ({ platform: c.platform, label: c.label })) ?? [];
+// Homepage matrix: per preset a block with one row per contract type (all,
+// vast per looptijd, variabel, dynamisch) and one column per platform. Ranks
+// are within the row (so #3 in "Vast 1 jaar" = 3rd cheapest 1-year fixed
+// contract), unlike the cards above which rank across all types for the
+// selected scenario. The brand toggle switches whose rank is shown (own
+// company or a sister brand); `busy` dims the tables while it reloads.
+export default function PresetMatrix({
+  data,
+  busy = false,
+  onBrandChange,
+}: {
+  data: PresetMatrixData;
+  busy?: boolean;
+  onBrandChange?: (brand: string) => void;
+}) {
+  const firstRow = data.types[0]?.key;
+  const platforms = data.presets[0]?.cards[firstRow]?.map((c) => ({ platform: c.platform, label: c.label })) ?? [];
   if (!data.presets.length || !platforms.length) return null;
+  const brand = data.brand ?? data.myCompany ?? "eigen merk";
 
   return (
     <section className="space-y-3">
@@ -74,12 +87,40 @@ export default function PresetMatrix({ data }: { data: PresetMatrixData }) {
           Alle presets per contracttype
         </h2>
         <span className="text-xs text-slate-600">
-          Rank van {data.myCompany ?? "eigen merk"} binnen het contracttype, laatste scan per preset · ↑↓ t.o.v. vorige scan ·
-          prijs = eigen beste per jaar, rood = duurder dan de goedkoopste van dat type
+          Rank van {brand} binnen het contracttype, laatste scan per preset · ↑↓ t.o.v. vorige scan · prijs = beste
+          {" "}{brand}-contract per jaar, rood = duurder dan de goedkoopste van dat type
         </span>
       </div>
+      {data.brands.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-slate-500">Merk:</span>
+          <div className="inline-flex rounded-lg bg-slate-100 p-0.5" role="radiogroup" aria-label="Merk">
+            {data.brands.map((b) => {
+              const active = b === data.brand;
+              return (
+                <button
+                  key={b}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={busy}
+                  onClick={() => !active && onBrandChange?.(b)}
+                  className={`rounded-md px-3 py-1 font-medium transition ${
+                    active ? "bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200" : "text-slate-600 hover:text-slate-900"
+                  } disabled:cursor-wait`}
+                >
+                  {b}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {data.presets.map((p) => (
-        <div key={p.id} className="overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
+        <div
+          key={p.id}
+          className={`overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-slate-200 transition-opacity ${busy ? "opacity-50" : ""}`}
+        >
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
             <div>
               <span className="text-sm font-semibold text-slate-900">{scenarioLabel(p)}</span>
@@ -97,7 +138,7 @@ export default function PresetMatrix({ data }: { data: PresetMatrixData }) {
           <table className="w-full min-w-[820px] table-fixed text-sm">
             <thead>
               <tr className="text-[11px] font-semibold uppercase tracking-wide">
-                <th className="w-24 px-3 py-1.5 text-left text-slate-500">Type</th>
+                <th className="w-32 px-3 py-1.5 text-left text-slate-500">Type</th>
                 {platforms.map((pl) => (
                   <th key={pl.platform} className={`px-2 py-1.5 text-center ${platformColor(pl.platform).text}`}>
                     {pl.label.split(".")[0]}
@@ -107,9 +148,9 @@ export default function PresetMatrix({ data }: { data: PresetMatrixData }) {
             </thead>
             <tbody>
               {data.types.map((t) => (
-                <tr key={t} className="border-t border-slate-100">
-                  <td className="px-3 py-1.5 text-xs font-semibold text-slate-700">{TYPE_LABEL[t] ?? t}</td>
-                  {(p.cards[t] ?? []).map((c) => (
+                <tr key={t.key} className="border-t border-slate-100">
+                  <td className="px-3 py-1.5 text-xs font-semibold text-slate-700">{t.label}</td>
+                  {(p.cards[t.key] ?? []).map((c) => (
                     <td key={c.platform} className="px-1 align-middle">
                       <Cell c={c} />
                     </td>

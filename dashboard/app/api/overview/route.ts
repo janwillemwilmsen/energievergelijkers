@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { expandTypes, overviewCards } from "@/lib/overviewCards";
+import { expandTypes, overviewCards, typeFilter } from "@/lib/overviewCards";
 
 /**
  * GET /api/overview?scenarioId=1[&types=vast,variabel]
@@ -14,6 +14,6 @@ export async function GET(req: NextRequest) {
   const types = (req.nextUrl.searchParams.get("types") ?? "").split(",").filter(Boolean);
 
   const me = await prisma.supplier.findFirst({ where: { isMyCompany: true } });
-  const { cards } = await overviewCards(scenarioId, { cards: expandTypes(types) });
+  const { cards } = await overviewCards(scenarioId, { cards: typeFilter(expandTypes(types)) });
   return NextResponse.json({ myCompany: me?.name ?? null, cards });
 }

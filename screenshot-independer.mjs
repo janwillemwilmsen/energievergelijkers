@@ -123,6 +123,31 @@ await run("screenshot-independer.mjs", "independer", async (page, input) => {
   await page.waitForSelector("text=/energiecontracten/i", { timeout: 45_000 }).catch(() => {});
   await page.waitForTimeout(1500);
 
+  // Sort on price. The results default to "Prijs-kwaliteit"; the sort control
+  // is a native <select> (values: 2=Goedkoopste, 1=Prijs-kwaliteit,
+  // 3=Klantcijfer) without id/name, so find it by its options.
+  const sortSelect = page.locator("select").filter({ has: page.locator('option:has-text("Goedkoopste")') }).first();
+  if (await sortSelect.count()) {
+    await sortSelect.selectOption({ label: "Goedkoopste" });
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+    // Sanity check: the "Geschat per maand" prices in the list (after the
+    // "Alle N energiecontracten" heading, so the personal top 3 is skipped)
+    // should now be ascending.
+    const prices = await page
+      .evaluate(() => {
+        const txt = document.body.innerText;
+        const from = txt.search(/Alle \d+ energiecontracten/);
+        const list = from >= 0 ? txt.slice(from) : txt;
+        return [...list.matchAll(/Geschat per maand\s*(\d+)[,.](\d{2})/g)].map((m) => Number(`${m[1]}.${m[2]}`));
+      })
+      .catch(() => []);
+    const ascending = prices.every((v, i) => i === 0 || v >= prices[i - 1]);
+    if (prices.length && !ascending) console.error("independer: sortering op Goedkoopste lijkt niet toegepast (prijzen niet oplopend)");
+  } else {
+    console.error("independer: sorteer-select niet gevonden — volgorde blijft Prijs-kwaliteit");
+  }
+
   // Expand the full ranking (default shows ~10 of N).
   for (let i = 0; i < 6; i++) {
     const more = page.getByRole("button", { name: /Toon volgende/i }).first();

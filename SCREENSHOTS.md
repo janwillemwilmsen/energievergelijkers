@@ -77,6 +77,10 @@ clients for the scan's **own** postcode + usage (so the shots are directly
 comparable to the scrape), streaming live per-platform status (spinner →
 ✓/✗) via `POST /api/archive/scan/screenshot`, and shows each finished
 screenshot inline (served by `/api/archive/scan/screenshot/image`).
+The scan page itself also shows, under each comparator's ranking column,
+a **📷 Bekijk screenshot** button (opens that platform's shot in a small popup
+window next to the ranking) or, when none exists yet, a **📷 Maak screenshot**
+button that runs only that platform's client and then turns into the link.
 Shots are stored per sweep as `<SHOTS_DIR>/<sweepId>/<platform>.png`; a
 presets sweep (four scenarios under one sweepId) gets a sub-folder per
 scenario, `<sweepId>/s<scenarioId>/`, so each scenario keeps its own set.
@@ -133,6 +137,14 @@ pass `--normaal/--dal/--gas/--teruglevering`; `--only <platform>` runs one.
   - *Independer* — the intro submit only arms once `/api/address/getaddressdata`
     returns; the "Je wensen" step then requires overstappen + current supplier +
     a contract type before "Vergelijken".
+- **EnergieKiezer sort**: the seeded state sets `userFilters.sortBy` to
+  `price`, which is the "Goedkoopste" tab (the site defaults to `priceQuality`
+  = Prijs-kwaliteit). The client warns on stderr if the list prices aren't
+  ascending afterwards.
+- **Independer sort**: the results default to "Prijs-kwaliteit"; the client
+  switches the sort select to **Goedkoopste** (lowest price first) before the
+  shot, matching the price ordering used elsewhere, and warns on stderr if the
+  list prices don't come out ascending.
 - **Contract type**: Independer's wizard forces one contract type (default
   "Vast"; pass `--contract dynamisch|variabel` to switch). The other five show
   all types at once, matching the scrapers' default `alle`.

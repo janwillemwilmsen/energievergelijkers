@@ -15,6 +15,8 @@ export default function Dashboard() {
   const [scenarioId, setScenarioId] = useState<number | null>(null);
   const [overview, setOverview] = useState<{ myCompany: string | null; cards: OverviewCard[] } | null>(null);
   const [matrix, setMatrix] = useState<PresetMatrixData | null>(null);
+  const [matrixBrand, setMatrixBrand] = useState<string | null>(null); // null = own company
+  const [matrixBusy, setMatrixBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadScenarios = useCallback(async () => {
@@ -51,14 +53,15 @@ export default function Dashboard() {
     loadData();
   }, [loadData]);
 
-  // Preset × contract-type matrix (independent of the selected scenario).
-  const loadMatrix = useCallback(
-    () =>
-      fetch("/api/overview/presets")
-        .then((x) => x.json())
-        .then((m) => setMatrix(m)),
-    []
-  );
+  // Preset × contract-type matrix (independent of the selected scenario,
+  // but rankable for a sister brand via the toggle above it).
+  const loadMatrix = useCallback(() => {
+    const qs = matrixBrand ? `?brand=${encodeURIComponent(matrixBrand)}` : "";
+    return fetch(`/api/overview/presets${qs}`)
+      .then((x) => x.json())
+      .then((m) => setMatrix(m))
+      .finally(() => setMatrixBusy(false));
+  }, [matrixBrand]);
   useEffect(() => {
     loadMatrix();
   }, [loadMatrix]);
@@ -93,9 +96,14 @@ export default function Dashboard() {
             ) : null}
           </p>
         </div>
-        <a href="/archive" className="text-sm font-medium text-emerald-700 hover:underline">
-          Scan-archief →
-        </a>
+        <nav className="flex gap-4 text-sm font-medium text-emerald-700">
+          <a href="/bookmarklets" className="hover:underline">
+            Bookmarklets →
+          </a>
+          <a href="/archive" className="hover:underline">
+            Scan-archief →
+          </a>
+        </nav>
         {activeScenario && (
           <div className="text-xs text-slate-500">
             {activeScenario.electricityNormal + activeScenario.electricityLow} kWh
@@ -125,7 +133,16 @@ export default function Dashboard() {
         <KpiCards cards={overview?.cards ?? []} />
       )}
 
-      {matrix && <PresetMatrix data={matrix} />}
+      {matrix && (
+        <PresetMatrix
+          data={matrix}
+          busy={matrixBusy}
+          onBrandChange={(b) => {
+            setMatrixBusy(true);
+            setMatrixBrand(b);
+          }}
+        />
+      )}
     </div>
   );
 }
