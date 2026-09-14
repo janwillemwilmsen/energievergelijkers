@@ -51,7 +51,16 @@ export async function fetchOffers(input) {
     const name = p.name ?? "";
     const contractType = /dynamisch/i.test(name) ? "Dynamisch" : /variabel/i.test(name) ? "Variabel" : /vast/i.test(name) ? "Vast" : name;
     const durY = name.match(/(\d+)\s*jaar/i);
-    const discount = det.discount?.total_sum || null;
+    // discount.total_sum is the cashback spread per contract year (Engie
+    // 3 jaar: 535 -> 178.33); the site shows the full "€ 535 korting". The
+    // canonical korting is the total, so scale multi-year fixed contracts up
+    // (snapping to whole euros when the API truncated the division).
+    const years = contractType === "Vast" && durY ? Number(durY[1]) : 1;
+    let discount = det.discount?.total_sum || null;
+    if (discount && years > 1) {
+      const total = discount * years;
+      discount = Math.abs(total - Math.round(total)) <= 0.05 ? Math.round(total) : total;
+    }
     return makeRecord("energievergelijk", input, {
       leverancier: p.provider?.name,
       product: name,

@@ -5,6 +5,8 @@
 // meterType "smart" is required for dynamic contracts to appear (valid values
 // per the API: single, double, smart). Alleen stroom via useGas:false;
 // teruglevering via production{electricity, electricityOffPeak}.
+// The yearly cost overview spreads a cashback over the contract term; the
+// canonical korting is the TOTAL (see totalDiscount).
 
 import { UA, parseCli, makeRecord, filterRecords, sortRecords, output, round } from "./energy-lib.mjs";
 
@@ -18,6 +20,17 @@ const HEADERS = {
 };
 
 const TYPE_NL = { fixed: "Vast", variable: "Variabel", dynamic: "Dynamisch", "dynamic-fixed": "Combinatie" };
+
+// costOverview.year.discount is the cashback spread over the contract term
+// (Engie 3 jaar: 575 -> 191.66 per year); the site itself shows the full
+// amount ("incl. € 575 korting"), as do Gaslicht/Independer/Pricewise.
+// Canonical `korting` is the total, so scale it back up for multi-year fixed
+// contracts (snapping to whole euros when the API truncated the division).
+function totalDiscount(yearly, months) {
+  if (yearly == null || !months || months <= 12) return yearly;
+  const total = yearly * (months / 12);
+  return Math.abs(total - Math.round(total)) <= 0.05 ? Math.round(total) : round(total, 2);
+}
 
 export async function fetchOffers(input) {
   const pcSpaced = input.postcode.slice(0, 4) + " " + input.postcode.slice(4);
@@ -67,7 +80,7 @@ export async function fetchOffers(input) {
       prijsPerMaand: round(p.costs?.amount, 2),
       prijsPerJaar: round(p.costOverview?.year?.total, 2),
       prijsPerJaarExclKorting: round(p.costOverview?.year?.subtotal, 2),
-      korting: p.costOverview?.year?.discount ? -p.costOverview.year.discount : null,
+      korting: totalDiscount(p.costOverview?.year?.discount ? -p.costOverview.year.discount : null, ct === "Vast" ? p.product?.monthsFixed : null),
       tariefStroomNormaal: er.ratePeak ?? er.rateSingle ?? null,
       tariefStroomDal: er.rateOffPeak ?? null,
       tariefGas: gr.rate ?? null,
