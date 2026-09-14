@@ -59,8 +59,10 @@ export async function GET(req: NextRequest) {
       },
       offers: offers.map((o) => {
         // All-in tariffs (incl. btw + energiebelasting) live in the columns.
-        // Pricewise only publishes delivery-only tariffs; recover those from the
-        // raw scraper record and flag them as not directly comparable.
+        // Pricewise scans from before 2026-09-15 only carried delivery-only
+        // tariffs; recover those from the raw scraper record and flag them as
+        // not directly comparable (scripts/backfill-pricewise-allin.mjs fills
+        // the columns for those rows).
         let elecNormal = o.tariffElecNormal;
         let elecLow = o.tariffElecLow;
         let gasT = o.tariffGas;

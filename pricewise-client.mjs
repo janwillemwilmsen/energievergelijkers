@@ -9,7 +9,11 @@
 // GetUserFilterAndResults (flowstep 2) -> resultslist.
 // Alleen stroom via filter.energytype=1; teruglevering via hassolarpanels +
 // electricitypeak/offpeakgeneration + solarpanelsnumber.
-// NOTE: pricewise's per-kWh/m3 tariffs are DELIVERY-ONLY (excl. energiebelasting).
+// Tariffs: deliverycosts.*variabledeliverytariff is the delivery tariff incl.
+// btw; totaltariffs.<band>_1_10000 (electricity) / totaltariffs_fullrange (gas)
+// add the energiebelasting of the first tax band = the all-in tariff the site
+// shows under "Meer details". Dynamic products: dynamicbase (+ tax) plus a
+// separate dynamicpurchasingcompensation. Both kinds are exported.
 
 import { UA, parseCli, makeRecord, filterRecords, sortRecords, output, round } from "./energy-lib.mjs";
 
@@ -167,7 +171,21 @@ export async function fetchOffers(input) {
   return list.map((p) => {
     const ed = p.electricitycosts?.deliverycosts;
     const gd = p.gascosts?.deliverycosts;
+    const et = p.electricitycosts?.totaltariffs ?? {};
+    const gt = p.gascosts?.totaltariffs ?? {};
     const eProd = p.electricityproduct ?? p.gasproduct ?? {};
+    // All-in tariffs (delivery + energiebelasting, incl. btw) as the site's
+    // "Meer details" shows them. totaltariffs.<band>_1_10000 is the first
+    // tax band (delivery tariff + governmentchargestax); dynamic products
+    // carry an expected base plus a purchasing compensation on top.
+    const nz = (v) => (typeof v === "number" && v !== 0 ? v : null);
+    const dynE = nz(et.dynamicbase) != null ? et.dynamicbase + (et.dynamicpurchasingcompensation || 0) : null;
+    const dynG = nz(gt.dynamicbase) != null ? gt.dynamicbase + (gt.dynamicpurchasingcompensation || 0) : null;
+    const allinPeak = p.isdynamictariff ? dynE : nz(et.peak_1_10000) ?? nz(et.standard_1_10000);
+    const allinOffPeak = p.isdynamictariff ? dynE : nz(et.offpeak_1_10000) ?? nz(et.standard_1_10000);
+    const allinGas = p.isdynamictariff ? dynG : nz(gt.totaltariffs_fullrange);
+    const dynDeliveryE = nz(ed?.dynamicdeliverytariffbase) != null ? ed.dynamicdeliverytariffbase + (ed.dynamicdeliverytariffpurchasingcompensation || 0) : null;
+    const dynDeliveryG = nz(gd?.dynamicdeliverytariffbase) != null ? gd.dynamicdeliverytariffbase + (gd.dynamicdeliverytariffpurchasingcompensation || 0) : null;
     return makeRecord("pricewise", input, {
       leverancier: eProd.suppliername ?? `supplier ${p.supplierid}`,
       product: p.computedname,
@@ -177,10 +195,12 @@ export async function fetchOffers(input) {
       prijsPerJaar: round(p.totalcost, 2),
       prijsPerJaarExclKorting: round(p.totalcost_withoutcashback, 2),
       korting: p.cashbackdisplayed || p.cashback || null,
-      // pricewise exposes delivery-only tariffs; all-in columns stay null
-      tariefStroomNormaalLevering: ed?.peakvariabledeliverytariff || null,
-      tariefStroomDalLevering: ed?.offpeakvariabledeliverytariff || null,
-      tariefGasLevering: gd?.variabledeliverytariff || null,
+      tariefStroomNormaal: round(allinPeak, 4),
+      tariefStroomDal: round(allinOffPeak, 4),
+      tariefGas: round(allinGas, 4),
+      tariefStroomNormaalLevering: round(p.isdynamictariff ? dynDeliveryE : ed?.peakvariabledeliverytariff || ed?.standardvariabledeliverytariff || null, 4),
+      tariefStroomDalLevering: round(p.isdynamictariff ? dynDeliveryE : ed?.offpeakvariabledeliverytariff || ed?.standardvariabledeliverytariff || null, 4),
+      tariefGasLevering: round(p.isdynamictariff ? dynDeliveryG : gd?.variabledeliverytariff || null, 4),
       vasteLeveringskostenStroomPerJaar: round(ed?.fixeddeliverycosts, 2) || null,
       vasteLeveringskostenGasPerJaar: round(gd?.fixeddeliverycosts, 2) || null,
       terugleverVergoedingPerKwh: p.feedintariff || null,

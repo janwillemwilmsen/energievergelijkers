@@ -706,7 +706,7 @@ function TariffSection({ detail }: { detail: ScanDetail }) {
   }, [rows, typeFilter, providerFilter, sortKey, sortAsc]);
 
   // Scatter: only all-in tariffs with both commodities; delivery-only rows
-  // (Pricewise, excl. belastingen) would distort the comparison.
+  // (old Pricewise scans, excl. belastingen) would distort the comparison.
   const scatterByPlatform = useMemo(
     () =>
       detail.platforms.map((p) => ({
@@ -806,7 +806,7 @@ function TariffSection({ detail }: { detail: ScanDetail }) {
           </div>
           <div className="border-t border-slate-100 p-2 text-[11px] text-slate-400">
             {filtered.length} contracten · tarieven incl. btw en energiebelasting
-            {hasDeliveryOnly && <> · † Pricewise toont alleen leveringstarieven (excl. belastingen)</>}
+            {hasDeliveryOnly && <> · † oudere Pricewise-scan: alleen leveringstarieven (excl. belastingen)</>}
           </div>
         </div>
 
@@ -831,7 +831,7 @@ function TariffSection({ detail }: { detail: ScanDetail }) {
             </ScatterChart>
           </ResponsiveContainer>
           <p className="mt-1 text-[11px] text-slate-400">
-            Elke stip = één contract (all-in tarieven; Pricewise uitgesloten). Linksonder is op beide
+            Elke stip = één contract (all-in tarieven; rijen zonder all-in tarief uitgesloten). Linksonder is op beide
             commodities de scherpste prijs; de verticale spreiding bij gelijk stroomtarief laat zien wie marge
             op gas pakt.
           </p>

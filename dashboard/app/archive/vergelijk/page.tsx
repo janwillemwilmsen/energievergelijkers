@@ -149,7 +149,7 @@ type OverviewSeries = { platform: string; label: string; points: OverviewPoint[]
 // tariffs (€0,28–€0,31) and ratings (7,5–8,9) need decimal ticks, otherwise
 // recharts collapses the axis onto a single integer.
 const TARIFF_NOTE =
-  "All-in tarief (incl. btw en energiebelasting) zoals de vergelijker het toont. Pricewise toont alleen leveringstarieven en ontbreekt daarom.";
+  "All-in tarief (incl. btw en energiebelasting) zoals de vergelijker het toont. Pricewise-scans van vóór 15-09-2026 hebben alleen leveringstarieven en ontbreken daarom (tenzij nagevuld met scripts/backfill-pricewise-allin.mjs).";
 const METRICS = [
   { key: "cheapest", label: "Goedkoopste contract", unit: "€/jaar", kind: "eur", decimals: 0, lowerIsBetter: null,
     help: "Verwachte jaarkosten (incl. eenmalige korting) van het goedkoopste contract dat de vergelijker toont voor dit scenario. Laat zien hoe scherp de markt op elke vergelijker is en of de bodemprijs stijgt of daalt." },

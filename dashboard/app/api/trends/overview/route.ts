@@ -12,8 +12,9 @@ import { prisma } from "@/lib/db";
  * absent) and myDelta = own brand's best annual cost minus the run's cheapest.
  * With a types filter, myRank is re-ranked within the selected types (offers
  * are in overall rank order, so it is the position in the filtered list).
- * Tariff averages use the all-in columns only (Pricewise's delivery-only
- * tariffs live in rawJson and stay excluded); dynamisch includes combinatie —
+ * Tariff averages use the all-in columns only (Pricewise scans from before
+ * 2026-09-15 only carry delivery tariffs in rawJson and stay excluded unless
+ * backfilled); dynamisch includes combinatie —
  * also in the types filter, which restricts every aggregate to those types.
  */
 export async function GET(req: NextRequest) {
