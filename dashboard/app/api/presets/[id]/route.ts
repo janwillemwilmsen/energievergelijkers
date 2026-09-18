@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { normalizeSlug, parseUsage, toPresetDto } from "@/lib/presets";
+import { getDefaultAddress, normalizeSlug, parseAddress, parseUsage, toPresetDto } from "@/lib/presets";
 
 const withCount = { _count: { select: { runs: true } } } as const;
 
 /**
  * PATCH /api/presets/:id — edit a preset.
- * Body: any of { name, label, electricityNormal, electricityLow, gas, solarFeedIn }
+ * Body: any of { name, label, electricityNormal, electricityLow, gas, solarFeedIn, postcode, huisnr }
+ * (postcode + huisnr both empty = follow the default address again).
  *
- * Label/slug edits happen in place. A usage edit moves the preset to the
+ * Label/slug/address edits happen in place. A usage edit moves the preset to the
  * scenario row with the new tuple (find-or-create) and demotes the old row
  * to a custom scenario, so historic scans keep the usage they were made
  * with. An old row without scans is deleted.
@@ -32,6 +33,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!label) return NextResponse.json({ error: "Label is verplicht" }, { status: 400 });
   const usage = parseUsage(b, cur);
   if (typeof usage === "string") return NextResponse.json({ error: usage }, { status: 400 });
+  const address = parseAddress(b, cur);
+  if (typeof address === "string") return NextResponse.json({ error: address }, { status: 400 });
 
   if (name !== cur.name && (await prisma.scenario.findFirst({ where: { isPreset: true, name, NOT: { id } } })))
     return NextResponse.json({ error: `Slug "${name}" is al in gebruik` }, { status: 409 });
@@ -43,8 +46,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     usage.solarFeedIn === cur.solarFeedIn;
 
   if (sameUsage) {
-    const preset = await prisma.scenario.update({ where: { id }, data: { name, label }, include: withCount });
-    return NextResponse.json({ preset: toPresetDto(preset), movedFrom: null });
+    const preset = await prisma.scenario.update({ where: { id }, data: { name, label, ...address }, include: withCount });
+    return NextResponse.json({ preset: toPresetDto(preset, await getDefaultAddress()), movedFrom: null });
   }
 
   const target = await prisma.scenario.findUnique({
@@ -58,15 +61,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const preset = await prisma.$transaction(async (tx) => {
     if (cur._count.runs === 0) await tx.scenario.delete({ where: { id } });
-    else await tx.scenario.update({ where: { id }, data: { isPreset: false, name: null, label: null, sortOrder: 0 } });
+    else
+      await tx.scenario.update({
+        where: { id },
+        data: { isPreset: false, name: null, label: null, sortOrder: 0, postcode: null, houseNumber: null },
+      });
     return tx.scenario.upsert({
       where: { electricityNormal_electricityLow_gas_solarFeedIn: usage },
-      create: { ...usage, name, label, sortOrder: cur.sortOrder, isPreset: true },
-      update: { name, label, sortOrder: cur.sortOrder, isPreset: true },
+      create: { ...usage, ...address, name, label, sortOrder: cur.sortOrder, isPreset: true },
+      update: { ...address, name, label, sortOrder: cur.sortOrder, isPreset: true },
       include: withCount,
     });
   });
-  return NextResponse.json({ preset: toPresetDto(preset), movedFrom: id });
+  return NextResponse.json({ preset: toPresetDto(preset, await getDefaultAddress()), movedFrom: id });
 }
 
 /**
@@ -84,6 +91,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     await prisma.scenario.delete({ where: { id } });
     return NextResponse.json({ ok: true, deleted: true });
   }
-  await prisma.scenario.update({ where: { id }, data: { isPreset: false, name: null, label: null, sortOrder: 0 } });
+  await prisma.scenario.update({
+    where: { id },
+    data: { isPreset: false, name: null, label: null, sortOrder: 0, postcode: null, houseNumber: null },
+  });
   return NextResponse.json({ ok: true, deleted: false, keptRuns: cur._count.runs });
 }

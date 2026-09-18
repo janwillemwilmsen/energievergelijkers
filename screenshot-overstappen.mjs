@@ -69,6 +69,36 @@ await run("screenshot-overstappen.mjs", "overstappen", async (page, input) => {
   await page.waitForLoadState("networkidle", { timeout: 60_000 }).catch(() => {});
   // resultatenlijst: wacht tot er prijzen staan
   await page.waitForSelector("text=/per maand/i", { timeout: 45_000 });
-  await clickIfVisible(page, ['button:has-text("Toon meer")'], { timeout: 2000 });
-  await page.waitForTimeout(1500);
+
+  // "Contract soort" ticks only "Vast" by default; the CLI fetches every
+  // contract type. Tick Variabel and Dynamisch too, same as the bookmarklet.
+  const boxes = page.locator('input[name="contract_type"]');
+  const n = await boxes.count();
+  for (let i = 0; i < n; i++) {
+    const box = boxes.nth(i);
+    if (await box.isChecked().catch(() => true)) continue;
+    // No <label>: the input sits (invisibly) over a styled div. A synthetic
+    // click on the input itself is what the bookmarklet does and what React
+    // listens for; fall back to clicking the wrapper.
+    await box.dispatchEvent("click");
+    await page.waitForTimeout(800);
+    if (!(await box.isChecked().catch(() => false))) {
+      await box.locator("xpath=..").click({ force: true });
+      await page.waitForTimeout(800);
+    }
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await page.waitForTimeout(1000);
+  }
+  if (n) {
+    let checked = 0;
+    for (let i = 0; i < n; i++) if (await boxes.nth(i).isChecked().catch(() => false)) checked++;
+    console.error(`overstappen: contractsoort ${checked}/${n} aangevinkt`);
+  }
+
+  // Expand until every deal is on the page.
+  for (let i = 0; i < 10; i++) {
+    const clicked = await clickIfVisible(page, ['button:has-text("Toon meer")'], { timeout: 2000 });
+    if (!clicked) break;
+    await page.waitForTimeout(1500);
+  }
 });

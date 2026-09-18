@@ -65,7 +65,7 @@ export function parseUsage(b: Record<string, unknown>, base?: Usage): Usage | st
   };
 }
 
-export async function getDefaultAddress() {
+export async function getDefaultAddress(): Promise<Address> {
   const rows = await prisma.setting.findMany({ where: { key: { in: [SETTING_POSTCODE, SETTING_HUISNR] } } });
   const get = (k: string) => rows.find((r) => r.key === k)?.value;
   return {
@@ -74,17 +74,50 @@ export async function getDefaultAddress() {
   };
 }
 
+export type Address = { postcode: string; huisnr: string };
+/** Scenario columns that carry a preset's own address (null = default address). */
+export type ScenarioAddress = { postcode: string | null; houseNumber: string | null };
+
+/**
+ * Validates an optional preset address in a request body. Both fields empty
+ * (or null) clears the address so the preset follows the default again; an
+ * absent field keeps the current value (`base`). Returns an error message or
+ * the Scenario columns.
+ */
+export function parseAddress(b: Record<string, unknown>, base?: ScenarioAddress): ScenarioAddress | string {
+  const rawPc = b.postcode === undefined ? (base?.postcode ?? null) : b.postcode;
+  const rawNr = b.huisnr === undefined ? (base?.houseNumber ?? null) : b.huisnr;
+  const emptyPc = rawPc == null || String(rawPc).trim() === "";
+  const emptyNr = rawNr == null || String(rawNr).trim() === "";
+  if (emptyPc && emptyNr) return { postcode: null, houseNumber: null };
+  const postcode = normalizePostcode(rawPc);
+  const houseNumber = normalizeHuisnr(rawNr);
+  if (!postcode) return "Postcode moet 4 cijfers + 2 letters zijn";
+  if (!houseNumber) return "Huisnummer moet een getal zijn";
+  return { postcode, houseNumber };
+}
+
+/** The address a scenario is scraped at: its own, else the default. */
+export function resolveAddress(s: ScenarioAddress, defaults: Address): Address {
+  return s.postcode && s.houseNumber ? { postcode: s.postcode, huisnr: s.houseNumber } : defaults;
+}
+
 export type PresetDto = Usage & {
   id: number;
   name: string;
   label: string;
   sortOrder: number;
   runCount: number;
+  /** The preset's own address; null = follows the default address. */
+  postcode: string | null;
+  huisnr: string | null;
+  /** Effective scrape address (own or default) — what the runners use. */
+  address: Address;
 };
 
 type ScenarioWithCount = Prisma.ScenarioGetPayload<{ include: { _count: { select: { runs: true } } } }>;
 
-export function toPresetDto(s: ScenarioWithCount): PresetDto {
+export function toPresetDto(s: ScenarioWithCount, defaults: Address): PresetDto {
   return {
     id: s.id,
     name: s.name ?? String(s.id),
@@ -95,14 +128,20 @@ export function toPresetDto(s: ScenarioWithCount): PresetDto {
     solarFeedIn: s.solarFeedIn,
     sortOrder: s.sortOrder,
     runCount: s._count.runs,
+    postcode: s.postcode,
+    huisnr: s.houseNumber,
+    address: resolveAddress(s, defaults),
   };
 }
 
-export async function getPresets(): Promise<PresetDto[]> {
-  const rows = await prisma.scenario.findMany({
-    where: { isPreset: true },
-    orderBy: SCENARIO_ORDER,
-    include: { _count: { select: { runs: true } } },
-  });
-  return rows.map(toPresetDto);
+export async function getPresets(defaults?: Address): Promise<PresetDto[]> {
+  const [rows, address] = await Promise.all([
+    prisma.scenario.findMany({
+      where: { isPreset: true },
+      orderBy: SCENARIO_ORDER,
+      include: { _count: { select: { runs: true } } },
+    }),
+    defaults ?? getDefaultAddress(),
+  ]);
+  return rows.map((r) => toPresetDto(r, address));
 }

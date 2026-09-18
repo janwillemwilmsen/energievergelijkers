@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getDefaultAddress, getPresets, normalizeSlug, parseUsage, toPresetDto } from "@/lib/presets";
+import { getDefaultAddress, getPresets, normalizeSlug, parseAddress, parseUsage, toPresetDto } from "@/lib/presets";
 
 /**
  * GET /api/presets
@@ -9,14 +9,16 @@ import { getDefaultAddress, getPresets, normalizeSlug, parseUsage, toPresetDto }
  * scripts/run-screenshots.mjs, which no longer hardcode either.
  */
 export async function GET() {
-  const [presets, address] = await Promise.all([getPresets(), getDefaultAddress()]);
+  const address = await getDefaultAddress();
+  const presets = await getPresets(address);
   return NextResponse.json({ presets, address });
 }
 
 /**
  * POST /api/presets — add a preset.
- * Body: { name, label, electricityNormal, electricityLow?, gas?, solarFeedIn? }
- * A custom scenario with the same usage tuple is promoted to a preset (its
+ * Body: { name, label, electricityNormal, electricityLow?, gas?, solarFeedIn?, postcode?, huisnr? }
+ * postcode/huisnr = the preset's own scrape address; omit or leave empty to
+ * use the default address. A custom scenario with the same usage tuple is promoted to a preset (its
  * scans stay attached); an existing preset with that tuple is a conflict.
  */
 export async function POST(req: NextRequest) {
@@ -29,6 +31,8 @@ export async function POST(req: NextRequest) {
   if (!label) return NextResponse.json({ error: "Label is verplicht" }, { status: 400 });
   const usage = parseUsage(b);
   if (typeof usage === "string") return NextResponse.json({ error: usage }, { status: 400 });
+  const address = parseAddress(b);
+  if (typeof address === "string") return NextResponse.json({ error: address }, { status: 400 });
 
   if (await prisma.scenario.findFirst({ where: { isPreset: true, name } }))
     return NextResponse.json({ error: `Slug "${name}" is al in gebruik` }, { status: 409 });
@@ -45,9 +49,9 @@ export async function POST(req: NextRequest) {
   const sortOrder = (max._max.sortOrder ?? -1) + 1;
   const preset = await prisma.scenario.upsert({
     where: { electricityNormal_electricityLow_gas_solarFeedIn: usage },
-    create: { ...usage, name, label, sortOrder, isPreset: true },
-    update: { name, label, sortOrder, isPreset: true },
+    create: { ...usage, ...address, name, label, sortOrder, isPreset: true },
+    update: { ...address, name, label, sortOrder, isPreset: true },
     include: { _count: { select: { runs: true } } },
   });
-  return NextResponse.json({ preset: toPresetDto(preset) }, { status: 201 });
+  return NextResponse.json({ preset: toPresetDto(preset, await getDefaultAddress()) }, { status: 201 });
 }

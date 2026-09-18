@@ -16,6 +16,10 @@ import { PRESET_COOLDOWN_HOURS, presetCooldown } from "@/lib/presets";
  *   -> sweep for that scenario, optionally for a specific address
  *   or: { presets: true }        -> re-run every preset scenario (/admin/presets)
  *
+ * Without an explicit address a preset runs at its own address (set on
+ * /admin/presets), falling back to the default address; the runner resolves
+ * that per preset from GET /api/presets.
+ *
  * Preset scans on the default address are rate-limited: at most once per
  * PRESET_COOLDOWN_HOURS (per preset; "all presets" looks at the most recent
  * preset run). A blocked request answers 429 with { error, lastRunAt,

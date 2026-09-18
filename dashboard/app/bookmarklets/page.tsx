@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { getDefaultAddress, getPresets } from "@/lib/presets";
+import { getPresets } from "@/lib/presets";
 import { BOOKMARKLET_SITES, bookmarkName, buildBookmarklet, presetArgs } from "@/lib/bookmarklets";
 import { usageLabel } from "@/lib/scenarioLabel";
 import CopyUrlButton from "./CopyUrlButton";
 
-// Presets and the default address live in the database: render per request.
+// Presets and their addresses live in the database: render per request.
 export const dynamic = "force-dynamic";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -17,9 +17,9 @@ function BookmarkLink({ href, name, title }: { href: string; name: string; title
 }
 
 export default async function BookmarkletsPage() {
-  const [presets, address] = await Promise.all([getPresets(), getDefaultAddress()]);
+  const presets = await getPresets();
   const rows = [
-    ...presets.map((p) => ({ key: `p${p.id}`, preset: p, args: presetArgs(p, address) })),
+    ...presets.map((p) => ({ key: `p${p.id}`, preset: p, args: presetArgs(p, p.address) })),
     { key: "ask", preset: null, args: null },
   ];
 
@@ -30,12 +30,8 @@ export default async function BookmarkletsPage() {
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Bookmarklets</h1>
           <p className="text-sm text-slate-500">
             Eén bookmark per vergelijker en preset: sleep hem naar je bladwijzerbalk, ga naar de vergelijker en klik. De
-            funnel wordt in dat tabblad doorlopen tot en met de resultatenpagina, met het verbruik van de preset op het
-            standaardadres{" "}
-            <span className="font-semibold text-slate-700">
-              {address.postcode} {address.huisnr}
-            </span>
-            .
+            funnel wordt in dat tabblad doorlopen tot en met de resultatenpagina, met het verbruik én het adres van de
+            preset (zie <Link href="/admin/presets" className="font-medium text-emerald-700 hover:underline">Presets</Link>).
           </p>
         </div>
         <nav className="flex gap-4 text-sm font-medium text-emerald-700">
@@ -68,6 +64,10 @@ export default async function BookmarkletsPage() {
                     <>
                       <div className="font-semibold text-slate-900">{row.preset.label}</div>
                       <div className="text-xs text-slate-600">{usageLabel(row.preset)}</div>
+                      <div className="text-xs text-slate-500">
+                        📍 {row.preset.address.postcode} {row.preset.address.huisnr}
+                        {row.preset.postcode ? "" : " (standaardadres)"}
+                      </div>
                       <code className="mt-1 block text-[10px] text-slate-400">{row.args}</code>
                     </>
                   ) : (

@@ -13,6 +13,10 @@ type Preset = {
   solarFeedIn: number;
   sortOrder: number;
   runCount: number;
+  /** Own scrape address; null = follows the default address. */
+  postcode: string | null;
+  huisnr: string | null;
+  address: Address;
 };
 type Address = { postcode: string; huisnr: string };
 
@@ -24,6 +28,9 @@ type Draft = {
   gas: number;
   mono: boolean;
   solarFeedIn: number;
+  /** "" = no own address (use the default). */
+  postcode: string;
+  huisnr: string;
 };
 
 type AddressState =
@@ -59,7 +66,11 @@ const toDraft = (p: Preset): Draft => ({
   gas: p.gas,
   mono: p.gas === 0,
   solarFeedIn: p.solarFeedIn,
+  postcode: p.postcode ?? "",
+  huisnr: p.huisnr ?? "",
 });
+
+const cleanPostcode = (v: string) => v.replace(/\s+/g, "").toUpperCase();
 
 const draftBody = (d: Draft) => ({
   name: d.name.trim().toLowerCase(),
@@ -68,7 +79,12 @@ const draftBody = (d: Draft) => ({
   electricityLow: d.electricityLow,
   gas: d.mono ? 0 : d.gas,
   solarFeedIn: d.solarFeedIn,
+  postcode: cleanPostcode(d.postcode),
+  huisnr: d.huisnr.trim(),
 });
+
+const addressChanged = (p: Preset, d: Draft) =>
+  (p.postcode ?? "") !== cleanPostcode(d.postcode) || (p.huisnr ?? "") !== d.huisnr.trim();
 
 const usageChanged = (p: Preset, d: Draft) =>
   p.electricityNormal !== d.electricityNormal ||
@@ -128,7 +144,7 @@ function AddressCard({ initial, onSaved }: { initial: Address; onSaved: (a: Addr
       <div className="mb-3 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold text-slate-700">Standaardadres</h2>
         <span className="text-[11px] text-slate-400">
-          gebruikt door “Scrape dit scenario”, “Ververs alle presets” en de CLI-runners zonder --postcode
+          voor presets zonder eigen adres, en voor de CLI-runners zonder --postcode
         </span>
       </div>
       <div className="flex flex-wrap items-end gap-3">
@@ -179,6 +195,60 @@ function AddressCard({ initial, onSaved }: { initial: Address; onSaved: (a: Addr
     </form>
   );
 }
+
+/** Per-preset address cells. Empty = the preset follows the default address (shown as placeholder). */
+function AddressFields({
+  d,
+  set,
+  addr,
+  defaults,
+}: {
+  d: Draft;
+  set: (patch: Partial<Draft>) => void;
+  addr: AddressState;
+  defaults: Address | null;
+}) {
+  const own = d.postcode.trim() !== "" || d.huisnr.trim() !== "";
+  return (
+    <td className="px-2 py-2">
+      <div className="flex items-center gap-1.5">
+        <input
+          value={d.postcode}
+          onChange={(e) => set({ postcode: e.target.value })}
+          placeholder={defaults?.postcode ?? "1234AB"}
+          className={`${field} mt-0 w-20 uppercase`}
+          maxLength={7}
+          title="Postcode voor deze preset; leeg = standaardadres"
+        />
+        <input
+          value={d.huisnr}
+          onChange={(e) => set({ huisnr: e.target.value.replace(/\D/g, "") })}
+          placeholder={defaults?.huisnr ?? "27"}
+          className={`${field} mt-0 w-14`}
+          title="Huisnummer voor deze preset; leeg = standaardadres"
+        />
+        <span className="w-4 text-xs" title={addressTitle(own, addr)}>
+          {!own && <span className="text-slate-300">std</span>}
+          {own && addr.state === "checking" && <span className="text-slate-400">…</span>}
+          {own && addr.state === "valid" && <span className="text-emerald-700">✓</span>}
+          {own && (addr.state === "invalid" || addr.state === "idle") && <span className="text-rose-600">✗</span>}
+        </span>
+      </div>
+    </td>
+  );
+}
+
+function addressTitle(own: boolean, addr: AddressState) {
+  if (!own) return "Gebruikt het standaardadres";
+  if (addr.state === "valid") return [addr.street, addr.city].filter(Boolean).join(", ") || "Adres gevonden";
+  if (addr.state === "checking") return "Adres controleren…";
+  if (addr.state === "invalid") return addr.reason === "not_found" ? "Adres niet gevonden" : "Ongeldige invoer";
+  return "Vul postcode (1234AB) én huisnummer in";
+}
+
+/** Whether a draft's address may be saved: empty (default) or a verified address. */
+const addressOk = (d: Draft, addr: AddressState) =>
+  (d.postcode.trim() === "" && d.huisnr.trim() === "") || addr.state === "valid";
 
 function UsageFields({ d, set }: { d: Draft; set: (patch: Partial<Draft>) => void }) {
   const num = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
@@ -235,12 +305,14 @@ function PresetRow({
   preset,
   index,
   count,
+  defaults,
   onChanged,
   onMove,
 }: {
   preset: Preset;
   index: number;
   count: number;
+  defaults: Address | null;
   onChanged: () => Promise<void>;
   onMove: (dir: -1 | 1) => Promise<void>;
 }) {
@@ -251,10 +323,15 @@ function PresetRow({
   const [error, setError] = useState<string | null>(null);
 
   const set = (patch: Partial<Draft>) => setD((cur) => ({ ...cur, ...patch }));
+  const addr = useAddressCheck(d.postcode, d.huisnr);
   const body = draftBody(d);
   const dirty =
-    body.name !== preset.name || body.label !== preset.label || usageChanged(preset, d);
-  const valid = body.label.length > 0 && /^[a-z0-9][a-z0-9-]{0,31}$/.test(body.name) && body.electricityNormal >= 1;
+    body.name !== preset.name || body.label !== preset.label || usageChanged(preset, d) || addressChanged(preset, d);
+  const valid =
+    body.label.length > 0 &&
+    /^[a-z0-9][a-z0-9-]{0,31}$/.test(body.name) &&
+    body.electricityNormal >= 1 &&
+    addressOk(d, addr);
 
   const save = async () => {
     if (
@@ -316,10 +393,16 @@ function PresetRow({
           />
         </td>
         <UsageFields d={d} set={set} />
+        <AddressFields d={d} set={set} addr={addr} defaults={defaults} />
         <td className="px-2 py-2 text-right tabular-nums text-slate-500">{nf.format(preset.runCount)}</td>
         <td className="px-2 py-2">
           <div className="flex items-center justify-end gap-1">
-            <button disabled={busy || !dirty || !valid} onClick={save} className={btnPrimary}>
+            <button
+              disabled={busy || !dirty || !valid}
+              onClick={save}
+              className={btnPrimary}
+              title={!addressOk(d, addr) ? "Vul een geldig adres in, of maak beide velden leeg voor het standaardadres" : "Opslaan"}
+            >
               Opslaan
             </button>
             <button disabled={busy} onClick={remove} className="rounded px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-30">
@@ -330,7 +413,7 @@ function PresetRow({
       </tr>
       {error && (
         <tr>
-          <td colSpan={9} className="px-2 pb-2 text-xs text-rose-600">
+          <td colSpan={10} className="px-2 pb-2 text-xs text-rose-600">
             {error}
           </td>
         </tr>
@@ -339,15 +422,38 @@ function PresetRow({
   );
 }
 
-const EMPTY_DRAFT: Draft = { name: "", label: "", electricityNormal: 2500, electricityLow: 0, gas: 1000, mono: false, solarFeedIn: 0 };
+const EMPTY_DRAFT: Draft = {
+  name: "",
+  label: "",
+  electricityNormal: 2500,
+  electricityLow: 0,
+  gas: 1000,
+  mono: false,
+  solarFeedIn: 0,
+  postcode: "",
+  huisnr: "",
+};
 
-function NewPresetRow({ onCreated, onCancel }: { onCreated: () => Promise<void>; onCancel: () => void }) {
+function NewPresetRow({
+  defaults,
+  onCreated,
+  onCancel,
+}: {
+  defaults: Address | null;
+  onCreated: () => Promise<void>;
+  onCancel: () => void;
+}) {
   const [d, setD] = useState<Draft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (patch: Partial<Draft>) => setD((cur) => ({ ...cur, ...patch }));
+  const addr = useAddressCheck(d.postcode, d.huisnr);
   const body = draftBody(d);
-  const valid = body.label.length > 0 && /^[a-z0-9][a-z0-9-]{0,31}$/.test(body.name) && body.electricityNormal >= 1;
+  const valid =
+    body.label.length > 0 &&
+    /^[a-z0-9][a-z0-9-]{0,31}$/.test(body.name) &&
+    body.electricityNormal >= 1 &&
+    addressOk(d, addr);
 
   const create = async () => {
     setBusy(true);
@@ -378,6 +484,7 @@ function NewPresetRow({ onCreated, onCancel }: { onCreated: () => Promise<void>;
           />
         </td>
         <UsageFields d={d} set={set} />
+        <AddressFields d={d} set={set} addr={addr} defaults={defaults} />
         <td className="px-2 py-2 text-right text-slate-300">—</td>
         <td className="px-2 py-2">
           <div className="flex items-center justify-end gap-1">
@@ -392,7 +499,7 @@ function NewPresetRow({ onCreated, onCancel }: { onCreated: () => Promise<void>;
       </tr>
       {error && (
         <tr>
-          <td colSpan={9} className="px-2 pb-2 text-xs text-rose-600">
+          <td colSpan={10} className="px-2 pb-2 text-xs text-rose-600">
             {error}
           </td>
         </tr>
@@ -442,9 +549,9 @@ export default function PresetsAdminPage() {
       <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
         <header className="flex items-end justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Presets &amp; standaardadres</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">Presets &amp; adressen</h1>
             <p className="text-sm text-slate-500">
-              De scenario-chips op het dashboard en het adres waarmee preset-scans draaien.
+              De scenario-chips op het dashboard, elk met het adres waarop de preset gescand wordt.
             </p>
           </div>
           <nav className="flex gap-4">
@@ -483,6 +590,7 @@ export default function PresetsAdminPage() {
                     <th className="px-2 py-1">Stroom dal (kWh/jr)</th>
                     <th className="px-2 py-1">Gas (m³/jr)</th>
                     <th className="px-2 py-1">Teruglevering (kWh/jr)</th>
+                    <th className="px-2 py-1">Adres (postcode · huisnr)</th>
                     <th className="px-2 py-1 text-right">Scans</th>
                     <th className="px-2 py-1" />
                   </tr>
@@ -490,16 +598,18 @@ export default function PresetsAdminPage() {
                 <tbody>
                   {presets.map((p, i) => (
                     <PresetRow
-                      key={`${p.id}:${p.name}:${p.label}:${p.electricityNormal}:${p.electricityLow}:${p.gas}:${p.solarFeedIn}`}
+                      key={`${p.id}:${p.name}:${p.label}:${p.electricityNormal}:${p.electricityLow}:${p.gas}:${p.solarFeedIn}:${p.postcode}:${p.huisnr}`}
                       preset={p}
                       index={i}
                       count={presets.length}
+                      defaults={address}
                       onChanged={load}
                       onMove={(dir) => move(i, dir)}
                     />
                   ))}
                   {adding && (
                     <NewPresetRow
+                      defaults={address}
                       onCreated={async () => {
                         await load();
                         setAdding(false);
@@ -509,7 +619,7 @@ export default function PresetsAdminPage() {
                   )}
                   {presets.length === 0 && !adding && (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-slate-400">
+                      <td colSpan={10} className="py-8 text-center text-slate-400">
                         Geen presets — voeg er een toe.
                       </td>
                     </tr>
@@ -521,6 +631,11 @@ export default function PresetsAdminPage() {
 
           <ul className="mt-3 space-y-1 text-[11px] text-slate-400">
             <li>Dal 0 = enkele meter · mono = alleen stroom · teruglevering 0 = geen zonnepanelen.</li>
+            <li>
+              Adres: het postcode/huisnummer waarop deze preset gescand wordt (scans, screenshots en bookmarklets). Leeg =
+              het standaardadres hierboven. Een adreswijziging geldt voor nieuwe scans; het archief houdt per scan het
+              gebruikte adres bij.
+            </li>
             <li>
               Label en slug wijzigen is direct. Verbruik wijzigen maakt een nieuw scenario: bestaande scans blijven onder het oude
               verbruik staan als eigen scenario, zodat het archief en de trends kloppen.

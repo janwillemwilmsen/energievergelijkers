@@ -7,9 +7,11 @@
 //   node scripts/run-scrapes.mjs --scenario all
 //   node scripts/run-scrapes.mjs --normaal 2900 --dal 0 --gas 1200 --teruglevering 0
 //
-// Presets (by slug, or "all") and the default address are NOT hardcoded here:
+// Presets (by slug, or "all") and their addresses are NOT hardcoded here:
 // they are configured on /admin/presets and fetched from GET /api/presets of
-// the dashboard (DASHBOARD_URL), which must therefore be running.
+// the dashboard (DASHBOARD_URL), which must therefore be running. Each preset
+// carries its own scrape address (or the default one); --postcode/--huisnr
+// override that for every scenario in this run.
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -38,8 +40,11 @@ const scenarios = scenarioArg ? presetScenarios(config, scenarioArg) : [
     teruglevering: Number(flag("teruglevering", 0)),
   },
 ];
-const postcode = flag("postcode", config?.address.postcode);
-const huisnr = flag("huisnr", config?.address.huisnr);
+// Explicit flags win; otherwise a preset's own (effective) address, else the default.
+const addressFor = (scenario) => ({
+  postcode: flag("postcode", scenario.address?.postcode ?? config?.address.postcode),
+  huisnr: flag("huisnr", scenario.address?.huisnr ?? config?.address.huisnr),
+});
 const sweepId = flag("sweep-id", `${new Date().toISOString()}-${randomUUID().slice(0, 8)}`);
 
 for (const scenario of scenarios) await runSweep(scenario);
@@ -65,6 +70,7 @@ function presetScenarios(config, slug) {
     dal: p.electricityLow,
     gas: p.gas,
     teruglevering: p.solarFeedIn,
+    address: p.address,
   }));
   if (slug === "all") {
     if (!presets.length) {
@@ -82,8 +88,9 @@ function presetScenarios(config, slug) {
 }
 
 async function runSweep(scenario) {
+  const { postcode, huisnr } = addressFor(scenario);
   console.log(
-    `Sweep ${sweepId} — scenario ${scenario.name ?? "custom"} (${scenario.normaal}/${scenario.dal} kWh, ${scenario.gas} m3, terug ${scenario.teruglevering})`
+    `Sweep ${sweepId} — scenario ${scenario.name ?? "custom"} (${scenario.normaal}/${scenario.dal} kWh, ${scenario.gas} m3, terug ${scenario.teruglevering}) — ${postcode} ${huisnr}`
   );
   const scenarioBody = {
     name: scenario.name ?? undefined,

@@ -39,8 +39,9 @@ const scenario = scenarioArg
       gas: Number(flag("gas", 1000)),
       teruglevering: Number(flag("teruglevering", 0)),
     };
-const postcode = flag("postcode", config?.address.postcode);
-const huisnr = flag("huisnr", config?.address.huisnr);
+// Explicit flags win; otherwise the preset's own (effective) address, else the default.
+const postcode = flag("postcode", scenario.address?.postcode ?? config?.address.postcode);
+const huisnr = flag("huisnr", scenario.address?.huisnr ?? config?.address.huisnr);
 const only = flag("only", "");
 const platforms = only ? PLATFORMS.filter((p) => p === only) : PLATFORMS;
 if (only && !platforms.length) {
@@ -104,5 +105,5 @@ function presetScenario(config, slug) {
     console.error(`Onbekende preset "${slug}" (beschikbaar: ${config.presets.map((x) => x.name).join(", ") || "geen"}).`);
     process.exit(1);
   }
-  return { name: p.name, normaal: p.electricityNormal, dal: p.electricityLow, gas: p.gas, teruglevering: p.solarFeedIn };
+  return { name: p.name, normaal: p.electricityNormal, dal: p.electricityLow, gas: p.gas, teruglevering: p.solarFeedIn, address: p.address };
 }

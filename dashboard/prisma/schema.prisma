@@ -48,6 +48,11 @@ model Scenario {
   gas               Int // m3/year, 0 = electricity-only (mono)
   solarFeedIn       Int // kWh/year returned to grid, 0 = none
   isPreset          Boolean @default(false)
+  // Per-preset scrape address (edited on /admin/presets). Null = use the
+  // default address from Setting. Presets run at one address each: a single
+  // address for all usage profiles produced wrong rankings.
+  postcode          String?
+  houseNumber       String?
 
   runs ScrapeRun[]
 
